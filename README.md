@@ -8,9 +8,17 @@ A cosy factory game across a whole archipelago. Mine **bit** (bright blue gem sh
 
 The game always loads the latest version - no downloads, no updates to install. Progress saves in your browser.
 
-## Play in a desktop window (Windows)
+## Play in its own window
 
-Download `BitMiner.bat` and `BitMiner-panic.ps1` into the same folder and double-click the bat. It opens the game in a small chromeless window in the corner of your screen, and **Ctrl+Space** instantly hides/restores the window (panic key).
+Opening the game gives you a **PLAY IN A WINDOW** button - it reopens itself as a small
+window in the corner of your screen, out of the way. There is nothing to install: the whole
+game is one HTML file.
+
+## Keeping your progress
+
+Progress saves automatically in your browser. To move a game to another browser or device,
+open the crab landlord's **FRIENDS** tab and use **BACK UP MY GAME** to copy a code, then
+**RESTORE A BACKUP** to paste it in.
 
 ## Controls
 

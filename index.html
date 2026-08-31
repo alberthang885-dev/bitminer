@@ -2626,7 +2626,24 @@ function drawLordPanel(){
         window.prompt('Send this gift code to your friend:',giftCode(what,amt));}],
       ['OPEN A GIFT','paste a gift code you received',function(){
         var code=window.prompt('Paste the gift code:');
-        if(code)redeemGift(code);}]
+        if(code)redeemGift(code);}],
+      ['BACK UP MY GAME','copy a code that restores everything',function(){
+        save();
+        var raw='';try{raw=localStorage.getItem('bitminer7')||'';}catch(e){}
+        if(!raw){S.hint='Nothing to back up yet';S.hintT=2.5;return;}
+        window.prompt('Your backup code - keep it somewhere safe:',encodeCode({t:'save',d:raw}));}],
+      ['RESTORE A BACKUP','paste a backup code (replaces this game)',function(){
+        var code=window.prompt('Paste your backup code:');
+        if(!code)return;
+        var d=decodeCode(code);
+        if(!d||d.t!=='save'||!d.d){S.hint='That is not a backup code';S.hintT=3;beep(160,0.1,'sawtooth',0.04);return;}
+        try{
+          JSON.parse(d.d);
+          localStorage.setItem('bitminer7',d.d);
+          S.hint='Backup restored - reloading...';S.hintT=3;
+          beep(760,0.08,'triangle',0.06);
+          setTimeout(function(){location.reload();},600);
+        }catch(e){S.hint='That backup looks damaged';S.hintT=3;}}]
     ];
     for(var f2=0;f2<frRows.length;f2++){
       rr(px+16,yy,LDW-32,48,9);fill('#3a3663');line(COL.gold,2.5);
