@@ -46,14 +46,14 @@ var KINDNAME={mini:'MINI BIT',bit:'BIT',large:'LARGE BIT',sup:'SUPER BIT',anom:'
 var CURS=['mini','bit','shell','large','pearl','sup','lsup','ultra','lultra'];
 
 /* ---------- machine catalogue ---------- */
-var SIZES={belt:1,mini:1,scan:1,gate:1,dredge:1,miner:2,seller:2,sup:2,ult:2,comp:2,craft:2,aqua:2,crab:2,gw:3};
-var TERRAIN={belt:'both',scan:'both',gate:'both',gw:'both',crab:'land',
+var SIZES={belt:1,mini:1,scan:1,gate:1,sep:1,dredge:1,miner:2,seller:2,sup:2,ult:2,comp:2,craft:2,aqua:2,crab:2,gw:3};
+var TERRAIN={belt:'both',scan:'both',gate:'both',sep:'both',gw:'both',crab:'land',
   miner:'land',mini:'land',sup:'land',ult:'land',seller:'land',comp:'land',craft:'land',
   aqua:'water',dredge:'water'};
-var PRICES={belt:25,mini:150,miner:600,seller:400,scan:120,gate:120,comp:900,craft:1200,sup:9000,gw:15000,aqua:1400,dredge:450,crab:1500,ult:30000};
+var PRICES={belt:25,mini:150,miner:600,seller:400,scan:120,gate:120,sep:200,comp:900,craft:1200,sup:9000,gw:15000,aqua:1400,dredge:450,crab:1500,ult:30000};
 function sizeOf(t){return SIZES[t]||1;}
 function sellback(t){return Math.floor((PRICES[t]||0)*0.6);}
-var RECIPES=[['belt',9],['scan',36],['gate',36],['mini',48],['dredge',140],['seller',125],
+var RECIPES=[['belt',9],['scan',36],['gate',36],['sep',60],['mini',48],['dredge',140],['seller',125],
              ['miner',200],['aqua',440],['comp',290],['craft',380]];
 
 /* ---------- island generation ---------- */
@@ -240,9 +240,10 @@ function canPlace(t,x,y){var n=sizeOf(t),ter=TERRAIN[t]||'land';
 function place(t,x,y,dir){
   if(t==='belt'){setCell(x,y,{t:'belt',dir:dir||0});return null;}
   var s={t:t,x:x,y:y,dir:dir||0,tm:Math.random()*2,pop:0,spin:Math.random()*6,k:0,puff:0,lid:0};
-  if(t==='seller'){s.dmg=0;s.thr=2+Math.floor(Math.random()*2);s.brk=false;}
+  if(t==='seller'){s.dmg=0;s.thr=2+Math.floor(Math.random()*2);s.brk=false;s.heat=0;s.why='';}
   if(t==='scan'){s.filt='any';s.mode='open';s.gates=[];}
   if(t==='gate'){s.open=true;s.ext=1;s.rdir=1;s.armed=false;s.flash=0;}
+  if(t==='sep'){s.k=0;s.spin=0;s.lastOut=-1;s.pulse=0;}
   if(t==='comp'){s.buf={mini:0,bit:0};s.press=0;}
   if(t==='craft'){s.ri=0;s.prog=0;s.made=0;}
   A.structs.push(s);
@@ -440,7 +441,8 @@ function mineKind(t,big){
 function emit(m,kind){
   var o=outlets(m),belts=[],spots=[];
   for(var i=0;i<o.length;i++){var q=o[i],c=cell(q[0],q[1]);
-    if(c&&c.t==='belt'&&!(DX[c.dir]===-q[2]&&DY[c.dir]===-q[3])&&beltFree(q[0],q[1],0.2))belts.push(q);
+    if(c&&c.t==='occ'&&c.s.t==='sep'&&beltFree(q[0],q[1],0.2))belts.push(q);
+    else if(c&&c.t==='belt'&&!(DX[c.dir]===-q[2]&&DY[c.dir]===-q[3])&&beltFree(q[0],q[1],0.2))belts.push(q);
     else if(inGrid(q[0],q[1])&&!c)spots.push(q);}
   var n=sizeOf(m.t);
   if(belts.length){var b=belts[(m.k++)%belts.length];
@@ -468,13 +470,51 @@ function beltInfo(x,y){
   var c=cell(x,y);if(!c)return null;
   if(c.t==='belt')return {dir:c.dir};
   if(c.t==='occ'&&c.s.t==='gate')return {dir:(c.s.armed?c.s.rdir:c.s.dir),g:c.s};
+  if(c.t==='occ'&&c.s.t==='sep')return {dir:sepPlan(c.s,-1),sep:c.s};
   return null;
 }
+/* a square that will take an item handed to it from direction d */
+function acceptsFrom(x,y,d){
+  var c=cell(x,y);
+  if(!c)return false;
+  if(c.t==='belt')return c.dir!==((d+2)%4);         /* not pointing straight back at us */
+  if(c.t==='occ'){
+    var k=c.s.t;
+    if(k==='sep')return true;
+    if(k==='gate')return (c.s.armed?c.s.rdir:c.s.dir)!==((d+2)%4);
+    return k==='seller'||k==='comp'||k==='craft'||k==='gw';
+  }
+  return false;
+}
+function sepOuts(sp,fromRev){
+  var outs=[];
+  for(var d=0;d<4;d++){
+    if(d===fromRev)continue;                        /* never straight back where it came from */
+    if(acceptsFrom(sp.x+DX[d],sp.y+DY[d],d))outs.push(d);
+  }
+  return outs;
+}
+/* which way the separator intends to send the item it is holding */
+function sepPlan(sp,fromRev){
+  var outs=sepOuts(sp,fromRev);
+  if(!outs.length){outs=sepOuts(sp,-1);}
+  if(!outs.length)return sp.lastOut>=0?sp.lastOut:0;
+  return outs[sp.k%outs.length];
+}
+var SELLER_COOL=1.1,SELLER_LIMIT=6;
 function sellerTake(se,kind,nx,ny){
   if(se.brk)return false;
+  se.heat=(se.heat||0)+1;
+  if(se.heat>SELLER_LIMIT){
+    se.brk=true;se.why='overload';
+    S.hint='An auto seller jammed - too much arriving at once! Split the flow with a SEPARATOR';S.hintT=5;
+    sparkle(cx(nx)+TS/2,cy(ny)+TS/2,'#ffb347',10);
+    beep(140,0.35,'sawtooth',0.08);
+    return false;
+  }
   if(kind==='anom'){
     se.dmg++;sparkle(cx(nx)+TS/2,cy(ny)+TS/2,COL.anom2,8);
-    if(se.dmg>=se.thr){se.brk=true;S.hint='An anomaly broke an auto seller! Click it to repair (45c)';S.hintT=4;
+    if(se.dmg>=se.thr){se.brk=true;se.why='anomaly';S.hint='An anomaly broke an auto seller! Click it to repair (45c)';S.hintT=4;
       beep(120,0.3,'sawtooth',0.07);}
     else beep(200,0.15,'sawtooth',0.05);
     return true;
@@ -492,6 +532,18 @@ function allGateways(){
     for(var j=0;j<I.structs.length;j++)if(I.structs[j].t==='gw')out.push({s:I.structs[j],isle:I});}
   return out;
 }
+function handOff(it,idx,nx,ny,d){
+  var nb=beltInfo(nx,ny),nc=cell(nx,ny);
+  if(nb){it.cx=nx;it.cy=ny;it.p=0;return true;}
+  if(nc&&nc.t==='occ'&&nc.s.t==='seller'){
+    if(sellerTake(nc.s,it.kind,nx,ny)){A.items.splice(idx,1);return true;}
+    it.p=1;return false;
+  }
+  if(nc&&nc.t==='occ'&&(nc.s.t==='comp'||nc.s.t==='craft'||nc.s.t==='gw')){
+    it.cx=nx;it.cy=ny;it.p=1;return true;    /* let the normal machine code eat it next tick */
+  }
+  it.p=1;return false;
+}
 function updateItems(dt){
   var sp=2.3;
   for(var i=A.items.length-1;i>=0;i--){
@@ -504,8 +556,28 @@ function updateItems(dt){
     it.p+=sp*dt;
     if(it.p>=1){
       if(bi.g&&bi.g.armed){bi.g.armed=false;bi.g.flash=1;}   /* one item per signal */
+      if(bi.sep){
+        /* NB: do not name anything 'sp' here - that is the belt speed in this scope */
+        var sepS=bi.sep,rev=(it.from===undefined)?-1:((it.from+2)%4);
+        var outs=sepOuts(sepS,rev);
+        if(!outs.length)outs=sepOuts(sepS,-1);
+        if(!outs.length){it.p=1;continue;}
+        var moved=false;
+        for(var o=0;o<outs.length;o++){
+          var d2=outs[(sepS.k+o)%outs.length];
+          var tx=sepS.x+DX[d2],ty=sepS.y+DY[d2];
+          if(beltInfo(tx,ty)&&!beltFree(tx,ty,0))continue;   /* that lane is busy right now */
+          sepS.k=(sepS.k+o+1)%Math.max(1,outs.length);
+          sepS.lastOut=d2;sepS.pulse=1;sepS.spin+=1.2;
+          it.from=d2;
+          handOff(it,i,tx,ty,d2);
+          moved=true;break;
+        }
+        if(!moved)it.p=1;
+        continue;
+      }
       var nx=it.cx+DX[bi.dir],ny=it.cy+DY[bi.dir],nb=beltInfo(nx,ny),nc=cell(nx,ny);
-      if(nb){ if(beltFree(nx,ny,0)){it.cx=nx;it.cy=ny;it.p-=1;} else it.p=1; }
+      if(nb){ if(beltFree(nx,ny,0)){it.cx=nx;it.cy=ny;it.p-=1;it.from=bi.dir;} else it.p=1; }
       else if(nc&&nc.t==='occ'&&nc.s.t==='seller'){
         if(sellerTake(nc.s,it.kind,nx,ny))A.items.splice(i,1);
         else it.p=1;
@@ -898,6 +970,30 @@ function drawGwFlat(g){
   X.beginPath();X.ellipse(0,6,20,8,0,0,6.3);X.fill();X.globalAlpha=1;
   X.restore();
 }
+function drawSepFlat(sp){
+  X.save();X.translate(cx(sp.x)+TS/2,cy(sp.y)+TS/2);X.scale(SPR,SPR);
+  rr(-16,-16,32,32,7);fill('#4b5a53');line(COL.dark,2.5);
+  /* four mouths */
+  for(var d=0;d<4;d++){
+    X.save();X.rotate(d*1.5708);
+    var live=acceptsFrom(sp.x+DX[d],sp.y+DY[d],d);
+    rr(-6,-16,12,7,3);fill(live?'#7ce7a2':'#39463f');line(COL.dark,1.6);
+    X.restore();
+  }
+  /* spinning splitter vane */
+  X.save();X.rotate(sp.spin+T*0.6);
+  X.strokeStyle='#cfe8d8';X.lineWidth=3;X.lineCap='round';
+  X.beginPath();X.moveTo(-8,0);X.lineTo(8,0);X.moveTo(0,-8);X.lineTo(0,8);X.stroke();
+  X.restore();
+  X.beginPath();X.arc(0,0,4.5,0,6.3);fill('#7ce7a2');line(COL.dark,2);
+  if(sp.pulse>0&&sp.lastOut>=0){
+    X.save();X.rotate(sp.lastOut*1.5708);
+    X.globalAlpha=sp.pulse*0.9;X.strokeStyle=COL.gold;X.lineWidth=3.5;X.lineCap='round';
+    X.beginPath();X.moveTo(3,-5);X.lineTo(10,0);X.lineTo(3,5);X.stroke();X.globalAlpha=1;
+    X.restore();
+  }
+  X.restore();
+}
 function drawGateFlat(g){
   X.save();X.translate(cx(g.x)+TS/2,cy(g.y)+TS/2);X.scale(SPR,SPR);
   rr(-16,-16,32,32,7);fill('#3f4a58');line(COL.dark,2.5);
@@ -1093,6 +1189,13 @@ function drawSeller(d){
   X.save();X.translate(0,-14);X.rotate(-d.lid*0.32);
   rr(-29,-16,58,18,8);fill(COL.cream);line(COL.dark,3);
   X.restore();
+  if(!d.brk&&(d.heat||0)>0.6){
+    var hp=clamp((d.heat||0)/SELLER_LIMIT,0,1);
+    rr(-22,-26,44,6,3);fill('#2b1b3a');
+    rr(-22,-26,44*hp,6,3);fill(hp>0.75?'#ff6d6d':(hp>0.45?'#ffb347':'#6bf28a'));
+    if(hp>0.75){X.globalAlpha=0.4+0.3*Math.sin(T*10);
+      txt('!',0,-34,14,'#ff6d6d','center');X.globalAlpha=1;}
+  }
   if(d.brk){
     txt('X',0,4,20,'#ff6d6d','center');
     if((T*2)%1<0.5){X.globalAlpha=0.5;X.fillStyle='#999';
@@ -1103,7 +1206,7 @@ function drawSeller(d){
   }
   X.fillStyle='#3a3557';rr(-20,18,8,8,3);X.fill();rr(12,18,8,8,3);X.fill();
   X.restore();
-  txt(d.brk?'BROKEN - click to fix':'AUTO SELLER',0,18,8,d.brk?'#ff9d9d':'#e8e2ff','center');
+  txt(d.brk?(d.why==='overload'?'JAMMED - click to fix':'BROKEN - click to fix'):'AUTO SELLER',0,18,8,d.brk?'#ff9d9d':'#e8e2ff','center');
 }
 function drawComp(d){
   var b=Math.sin(T*1.8+d.x)*1.1,pr=d.press||0;
@@ -1427,6 +1530,10 @@ function itemIcon(kind,scale){
   else if(kind==='scan'){rr(-14,-14,28,28,6);fill('#2f4a48');line(COL.dark,2.5);
     X.beginPath();X.arc(0,0,8,0,6.3);fill('#1f3b39');line('#57e6c9',2);
     X.strokeStyle='#57e6c9';X.lineWidth=2;X.beginPath();X.moveTo(0,0);X.lineTo(6,-4);X.stroke();}
+  else if(kind==='sep'){rr(-14,-14,28,28,6);fill('#4b5a53');line(COL.dark,2.5);
+    X.strokeStyle='#cfe8d8';X.lineWidth=2.5;X.lineCap='round';
+    X.beginPath();X.moveTo(-9,0);X.lineTo(9,0);X.moveTo(0,-9);X.lineTo(0,9);X.stroke();
+    X.beginPath();X.arc(0,0,4,0,6.3);fill('#7ce7a2');line(COL.dark,1.8);}
   else if(kind==='gate'){rr(-14,-14,28,28,6);fill('#3f4a58');line(COL.dark,2.5);
     X.strokeStyle='#9fb3c9';X.lineWidth=2.5;X.lineCap='round';
     X.beginPath();X.moveTo(-10,0);X.lineTo(2,0);X.stroke();
@@ -1464,6 +1571,7 @@ var ITEMS=[
  {k:'seller',name:'AUTO SELLER',hot:'3',desc:'Sells arriving bit. Anomalies break it.'},
  {k:'scan',name:'SCANNER',hot:'',desc:'Watches the square ahead. Click it to set up.'},
  {k:'gate',name:'REDIRECTOR',hot:'',desc:'Sends ONE spotted item down a side route. Link a scanner.'},
+ {k:'sep',name:'SEPARATOR',hot:'',desc:'Splits one belt evenly into every belt leaving it.'},
  {k:'comp',name:'COMPRESSOR',hot:'',desc:'4 mini bits -> 1 bit.  9 bits -> 1 super bit.'},
  {k:'craft',name:'CRAFTER',hot:'',desc:'Eats bits, builds machines. Click it to pick one.'},
  {k:'aqua',name:'AQUA MINER',hot:'',desc:'Water only. Dredges bit, shells and pearls.'},
@@ -1605,7 +1713,7 @@ function sellTyped(){
 function shopRows(){
   var rows=[['CONVEYOR',25,'belt'],['MINI MINER',150,'mini'],['BITMINER',600,'miner'],
             ['AUTO SELLER',400,'seller'],['SCANNER',120,'scan'],['REDIRECTOR',120,'gate'],
-            ['DREDGER',450,'dredge'],['AQUA MINER',1400,'aqua'],
+            ['SEPARATOR',200,'sep'],['DREDGER',450,'dredge'],['AQUA MINER',1400,'aqua'],
             ['COMPRESSOR',900,'comp'],['CRAFTER',1200,'craft'],['CONCIERGE CRAB',1500,'crab']];
   rows.push(S.supUnlocked?['SUPER MINER',9000,'sup']:['SUPER MINER','???','locked']);
   rows.push(S.gwUnlocked?['GATEWAY',15000,'gw']:['GATEWAY','???','locked']);
@@ -2216,7 +2324,7 @@ C.addEventListener('mousedown',function(e){
         beep(620,0.05,'square',0.04);save();return;}
       if(st.t==='seller'&&st.brk){
         if(S.coins<45){S.hint='Repairs cost 45c';S.hintT=2;beep(160,0.1,'sawtooth',0.04);return;}
-        S.coins-=45;st.brk=false;st.dmg=0;st.thr=2+Math.floor(Math.random()*2);
+        S.coins-=45;st.brk=false;st.dmg=0;st.heat=0;st.why='';st.thr=2+Math.floor(Math.random()*2);
         pop(cx(st.x)+TS,cy(st.y),'-45c',COL.gold);sparkle(cx(st.x)+TS,cy(st.y)+TS,'#7ce7a2',8);
         S.hint='Auto seller repaired!';S.hintT=3;beep(760,0.08,'triangle',0.05);save();return;
       }
@@ -2298,7 +2406,7 @@ function save(){
         if(c&&c.t==='belt')belts.push([x,y,c.dir]);}
       var st=I.structs.map(function(s){
         var o=[s.t,s.x,s.y,s.dir];
-        if(s.t==='seller')o.push({dmg:s.dmg,thr:s.thr,brk:s.brk});
+        if(s.t==='seller')o.push({dmg:s.dmg,thr:s.thr,brk:s.brk,why:s.why});
         if(s.t==='scan')o.push({filt:s.filt,mode:s.mode,gates:s.gates});
         if(s.t==='gate')o.push({rdir:s.rdir,dir:s.dir});
         if(s.t==='comp')o.push({buf:s.buf});
@@ -2443,8 +2551,9 @@ function simulate(dt){
         s.tm+=dt;s.spin+=dt*2.6;
         if(s.tm>cad){s.tm=0;produce(s);}
         s.pop=Math.max(0,s.pop-dt*3);s.puff=Math.max(0,s.puff-dt*1.2);}
-      else if(s.t==='seller')s.lid=Math.max(0,s.lid-dt*3);
-      else if(s.t==='comp')s.press=Math.max(0,(s.press||0)-dt*2);
+      else if(s.t==='seller'){s.lid=Math.max(0,s.lid-dt*3);s.heat=Math.max(0,(s.heat||0)-dt*SELLER_COOL);}
+      else if(s.t==='sep')s.pulse=Math.max(0,(s.pulse||0)-dt*3);
+    else if(s.t==='comp')s.press=Math.max(0,(s.press||0)-dt*2);
       else if(s.t==='craft')s.made=Math.max(0,(s.made||0)-dt*1.5);
     }
     updateItems(dt);updateLoose(dt);updateScanners(dt);
@@ -2486,6 +2595,7 @@ function render(){
   for(var f=0;f<A.structs.length;f++){var fs=A.structs[f];
     if(fs.t==='gate')drawGateFlat(fs);
     else if(fs.t==='scan')drawScanFlat(fs);
+    else if(fs.t==='sep')drawSepFlat(fs);
     else if(fs.t==='gw')drawGwFlat(fs);}
   if(mouse.in&&!S.shop&&!S.inv&&!S.parrot&&!S.land&&S.stock[S.tool]>0){
     var t=S.tool,n=sizeOf(t),ok=canPlace(t,mouse.gx,mouse.gy);
@@ -2500,7 +2610,7 @@ function render(){
   }
   var list=[];
   for(var s3=0;s3<A.structs.length;s3++){var st=A.structs[s3];
-    if(st.t==='gate'||st.t==='scan')continue;
+    if(st.t==='gate'||st.t==='scan'||st.t==='sep')continue;
     var nn=sizeOf(st.t);
     list.push({wy:cy(st.y)+TS*nn-4,wx:cx(st.x)+TS*nn/2,k:st.t,o:st});}
   if(CURI.home){
