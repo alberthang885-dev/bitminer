@@ -52,6 +52,9 @@ var TERRAIN={belt:'both',scan:'both',gate:'both',sep:'both',gw:'both',crab:'land
   aqua:'water',dredge:'water'};
 var PRICES={belt:25,mini:150,miner:600,seller:400,scan:120,gate:120,sep:200,gen:0,lgen:0,comp:900,craft:1200,sup:9000,gw:15000,aqua:1400,dredge:450,crab:1500,ult:30000};
 function sizeOf(t){return SIZES[t]||1;}
+var SIZEW={gen:2},SIZEH={gen:3};          /* anything not listed is square */
+function sizeW(t){return SIZEW[t]||sizeOf(t);}
+function sizeH(t){return SIZEH[t]||sizeOf(t);}
 function sellback(t){return Math.floor((PRICES[t]||0)*0.6);}
 /* ---------- electricity ---------- */
 var POWER={belt:1,scan:1,gate:1,sep:2,mini:3,dredge:4,seller:5,miner:6,comp:8,craft:8,
@@ -258,15 +261,15 @@ var S={bag:{mini:0,bit:0,large:0,sup:0,anom:0,shell:0,pearl:0,ultra:0,lsup:0,lul
   price:7.5,trend:0,hist:[],mkT:0,ptT:0,newsT:0,news:'',
   pts:0,rew:0,supUnlocked:false,
   tool:'belt',dir:0,isle:0,
-  shop:false,inv:false,parrot:false,land:false,ltab:'own',confirm:null,power:false,scfg:null,ccfg:null,linking:null,crabP:null,lore:null,loreN:0,
+  shop:false,inv:false,parrot:false,land:false,ltab:'own',confirm:null,power:false,moveNpc:null,scfg:null,ccfg:null,linking:null,crabP:null,lore:null,loreN:0,
   amt:'',amtFocus:false,sscroll:0,sscrollMax:0,iscroll:0,iscrollMax:0,lscroll:0,lscrollMax:0,
   renIdx:-1,renTxt:'',
   sold:0,mined:0,tut:0,tutT:0,didPickup:false,sawParrot:false,sawLand:false,pops:[],spark:[],
   hint:'Visit the mantis stall to trade',hintT:6};
 
-function canPlace(t,x,y){var n=sizeOf(t),ter=TERRAIN[t]||'land';
+function canPlace(t,x,y){var wN=sizeW(t),hN=sizeH(t),ter=TERRAIN[t]||'land';
   if(t==='crab'&&A.home)return false;   /* the boss crab allows no branch offices at HQ */
-  for(var j=0;j<n;j++)for(var i2=0;i2<n;i2++){
+  for(var j=0;j<hN;j++)for(var i2=0;i2<wN;i2++){
     if(!inGrid(x+i2,y+j))return false;
     if(cell(x+i2,y+j))return false;
     var land=isLand(x+i2,y+j);
@@ -284,8 +287,8 @@ function place(t,x,y,dir){
   if(t==='comp'){s.buf={mini:0,bit:0};s.press=0;}
   if(t==='craft'){s.ri=0;s.prog=0;s.made=0;}
   A.structs.push(s);
-  var n=sizeOf(t);
-  for(var j=0;j<n;j++)for(var i2=0;i2<n;i2++)setCell(x+i2,y+j,{t:'occ',s:s});
+  var wN=sizeW(t),hN=sizeH(t);
+  for(var j=0;j<hN;j++)for(var i2=0;i2<wN;i2++)setCell(x+i2,y+j,{t:'occ',s:s});
   return s;}
 function structAt(x,y){var c=cell(x,y);return (c&&c.t==='occ')?c.s:null;}
 function removeAt(x,y){
@@ -293,13 +296,13 @@ function removeAt(x,y){
   if(c.t==='stall'||c.t==='deco'||c.t==='npc')return false;
   if(c.t==='belt'){setCell(x,y,null);S.stock.belt++;
     A.items=A.items.filter(function(it){return !(it.cx===x&&it.cy===y);});return true;}
-  var s=c.s,n=sizeOf(s.t);
-  for(var j=0;j<n;j++)for(var i2=0;i2<n;i2++)setCell(s.x+i2,s.y+j,null);
+  var s=c.s,wN=sizeW(s.t),hN=sizeH(s.t);
+  for(var j=0;j<hN;j++)for(var i2=0;i2<wN;i2++)setCell(s.x+i2,s.y+j,null);
   A.structs.splice(A.structs.indexOf(s),1);S.stock[s.t]++;
   if(s.t==='gate')A.structs.forEach(function(o){if(o.t==='scan')o.gates=o.gates.filter(function(g){return !(g[0]===s.x&&g[1]===s.y);});});
   if(S.scfg===s)S.scfg=null;
   if(S.ccfg===s)S.ccfg=null;
-  A.items=A.items.filter(function(it){return !(it.cx>=s.x&&it.cx<s.x+n&&it.cy>=s.y&&it.cy<s.y+n);});
+  A.items=A.items.filter(function(it){return !(it.cx>=s.x&&it.cx<s.x+wN&&it.cy>=s.y&&it.cy<s.y+hN);});
   return true;}
 
 /* ---------- palms ---------- */
@@ -367,18 +370,29 @@ var M={x:STALL.wx+8*SPR,y:STALL.wy-14*SPR,ph:0,face:-1,blink:0,talk:0};
 /* Volt the axolotl runs the island's generator */
 var VOLT=(function(){
   var back=A;A=HOME;
-  var g=null;
-  for(var r=0;r<14&&!g;r++){
-    var bx=Math.round(GW/2)+5,by=Math.round(GH/2)+3;
-    for(var yy=by-r;yy<=by+r&&!g;yy++)for(var xx=bx-r;xx<=bx+r;xx++){
-      if(canPlace('gen',xx,yy)){g=place('gen',xx,yy,0);break;}}
+  /* keep the power yard well clear of the stall, the parrot and the landlord */
+  var others=[[STALL.x+2,STALL.y+1],[PARROT.x,PARROT.y],[LORD.x,LORD.y]];
+  function clearance(x,y){
+    var m=1e9;
+    for(var i=0;i<others.length;i++){
+      var d=Math.abs(others[i][0]-x)+Math.abs(others[i][1]-y);
+      if(d<m)m=d;
+    }
+    return m;
   }
-  A=back;
-  if(!g)return null;
-  var spot={x:g.x,y:g.y+2};
-  if(HOME.cells[spot.y*GW+spot.x])spot={x:g.x+1,y:g.y+2};
+  var best=null,bs=-1;
+  for(var y=1;y<GH-4;y++)for(var x=1;x<GW-3;x++){
+    if(!canPlace('gen',x,y))continue;
+    if(!isLand(x,y+3)||HOME.cells[(y+3)*GW+x])continue;   /* room for Volt below it */
+    var sc=clearance(x+1,y+1);
+    if(sc>bs){bs=sc;best={x:x,y:y};}
+  }
+  if(!best)return null;
+  var g=place('gen',best.x,best.y,0);
+  var spot={x:g.x,y:g.y+3};
   HOME.cells[spot.y*GW+spot.x]={t:'npc'};
-  return {gen:g,x:spot.x,y:spot.y,wx:cx(spot.x)+TS/2,wy:cy(spot.y)+TS-2};
+  A=back;
+  return {gen:g,x:spot.x,y:spot.y,wx:cx(spot.x)+TS/2,wy:cy(spot.y)+TS-2,minDist:bs};
 })();
 
 /* ---------- tutorial ---------- */
@@ -429,6 +443,75 @@ function drawTut(){
   txt('skip',tutSkip.x+21,tutSkip.y+12,9,'#8d88b5','center');
 }
 
+/* ---------- picking up and re-siting the islanders ---------- */
+var NPCFOOT={stall:[4,2],parrot:[1,1],lord:[1,1],volt:[1,1],emp:[1,1]};
+function npcHere(x,y){
+  if(CURI.home){
+    if(x>=STALL.x&&x<STALL.x+4&&y>=STALL.y&&y<STALL.y+2)return 'stall';
+    if(PARROT.x===x&&PARROT.y===y)return 'parrot';
+    if(LORD.x===x&&LORD.y===y)return 'lord';
+    if(VOLT&&VOLT.x===x&&VOLT.y===y)return 'volt';
+  }
+  if(CURI.emp&&CURI.emp.x===x&&CURI.emp.y===y)return 'emp';
+  return null;
+}
+function npcCells(key,x,y,val){
+  var f=NPCFOOT[key],mark=key==='stall'?'stall':'npc';
+  for(var j=0;j<f[1];j++)for(var i=0;i<f[0];i++)
+    CURI.cells[(y+j)*GW+(x+i)]=val?{t:mark}:null;
+}
+function npcOrigin(key){
+  if(key==='stall')return [STALL.x,STALL.y];
+  if(key==='parrot')return [PARROT.x,PARROT.y];
+  if(key==='lord')return [LORD.x,LORD.y];
+  if(key==='volt')return [VOLT.x,VOLT.y];
+  if(key==='emp')return [CURI.emp.x,CURI.emp.y];
+  return null;
+}
+function npcCanSit(key,x,y){
+  var f=NPCFOOT[key];
+  for(var j=0;j<f[1];j++)for(var i=0;i<f[0];i++){
+    if(!isLand(x+i,y+j))return false;
+    if(CURI.cells[(y+j)*GW+(x+i)])return false;
+  }
+  return true;
+}
+function npcPlace(key,x,y){
+  npcCells(key,x,y,true);
+  if(key==='stall'){
+    STALL.x=x;STALL.y=y;STALL.wx=cx(x)+TS*2;STALL.wy=cy(y)+TS*2-4;
+    M.x=STALL.wx+8*SPR;M.y=STALL.wy-14*SPR;
+  }
+  else if(key==='parrot'){PARROT.x=x;PARROT.y=y;PARROT.wx=cx(x)+TS/2;PARROT.wy=cy(y)+TS-2;}
+  else if(key==='lord'){LORD.x=x;LORD.y=y;LORD.wx=cx(x)+TS/2;LORD.wy=cy(y)+TS-2;}
+  else if(key==='volt'){VOLT.x=x;VOLT.y=y;VOLT.wx=cx(x)+TS/2;VOLT.wy=cy(y)+TS-2;}
+  else if(key==='emp'){CURI.emp.x=x;CURI.emp.y=y;CURI.emp.wx=cx(x)+TS/2;CURI.emp.wy=cy(y)+TS-2;}
+}
+function npcPickUp(key){
+  var o=npcOrigin(key);
+  npcCells(key,o[0],o[1],false);
+  S.moveNpc={key:key,ox:o[0],oy:o[1]};
+  S.hint='Carrying '+npcLabel(key)+' - left-click to set them down (Esc to cancel)';S.hintT=4;
+  beep(520,0.06,'triangle',0.05);
+}
+function npcLabel(key){
+  return key==='stall'?'the mantis stall':key==='parrot'?'the parrot':
+         key==='lord'?'the crab landlord':key==='volt'?'Volt':'your island staff';
+}
+function npcDrop(x,y){
+  var mv=S.moveNpc;if(!mv)return false;
+  if(!npcCanSit(mv.key,x,y)){S.hint='They will not fit there';S.hintT=2;beep(180,0.08,'sawtooth',0.035);return true;}
+  npcPlace(mv.key,x,y);
+  S.moveNpc=null;S.hint=npcLabel(mv.key)+' settled in';S.hintT=2.5;
+  sparkle(cx(x)+TS/2,cy(y)+TS/2,COL.gold,8);beep(760,0.07,'triangle',0.05);save();
+  return true;
+}
+function npcCancelMove(){
+  var mv=S.moveNpc;if(!mv)return;
+  npcPlace(mv.key,mv.ox,mv.oy);S.moveNpc=null;
+  S.hint='Put them back';S.hintT=2;
+}
+
 /* ---------- audio & fx (silenced for background islands) ---------- */
 var AC=null;
 function beep(f,d,type,vol){
@@ -464,9 +547,10 @@ function chaChing(big){
 function priceOf(k){return S.price*MULT[k];}
 
 /* ---------- mining ---------- */
-function outlets(m){var o=[],n=sizeOf(m.t);
-  for(var i=0;i<n;i++){o.push([m.x+i,m.y-1,0,-1]);o.push([m.x+i,m.y+n,0,1]);
-    o.push([m.x-1,m.y+i,-1,0]);o.push([m.x+n,m.y+i,1,0]);} return o;}
+function outlets(m){var o=[],wN=sizeW(m.t),hN=sizeH(m.t),i;
+  for(i=0;i<wN;i++){o.push([m.x+i,m.y-1,0,-1]);o.push([m.x+i,m.y+hN,0,1]);}
+  for(i=0;i<hN;i++){o.push([m.x-1,m.y+i,-1,0]);o.push([m.x+wN,m.y+i,1,0]);}
+  return o;}
 function beltFree(x,y,p){
   for(var i=0;i<A.items.length;i++){var it=A.items[i];
     if(it.cx===x&&it.cy===y&&Math.abs(it.p-p)<0.34)return false;} return true;}
@@ -497,14 +581,14 @@ function emit(m,kind){
     if(c&&c.t==='occ'&&(c.s.t==='sep'||c.s.t==='gen'||c.s.t==='lgen')&&beltFree(q[0],q[1],0.2))belts.push(q);
     else if(c&&c.t==='belt'&&!(DX[c.dir]===-q[2]&&DY[c.dir]===-q[3])&&beltFree(q[0],q[1],0.2))belts.push(q);
     else if(inGrid(q[0],q[1])&&!c)spots.push(q);}
-  var n=sizeOf(m.t);
+  var mx=cx(m.x)+TS*sizeW(m.t)/2,my=cy(m.y)+TS*sizeH(m.t)/2;
   if(belts.length){var b=belts[(m.k++)%belts.length];
     A.items.push({cx:b[0],cy:b[1],p:0.15,kind:kind});
     sparkle(cx(b[0])+TS/2,cy(b[1])+TS/2,kind==='sup'?COL.sup:COL.bit,4);return;}
   var t=spots.length?spots[Math.floor(Math.random()*spots.length)]:o[Math.floor(Math.random()*o.length)];
-  if(A.loose.length<70)A.loose.push({x0:cx(m.x)+TS*n/2,y0:cy(m.y)+TS*n/2,
+  if(A.loose.length<70)A.loose.push({x0:mx,y0:my,
     x1:cx(t[0])+TS/2+(Math.random()*10-5),y1:cy(t[1])+TS/2+(Math.random()*10-5),
-    t:0,dur:0.55,land:false,bob:Math.random()*6,x:cx(m.x)+TS*n/2,y:cy(m.y)+TS*n/2,z:0,kind:kind});
+    t:0,dur:0.55,land:false,bob:Math.random()*6,x:mx,y:my,z:0,kind:kind});
 }
 function produce(m){
   m.pop=1;m.puff=1;S.mined++;
@@ -1401,10 +1485,10 @@ function drawNpcCritter(n){
   txt('..',0,by-2,12,'#5a3820','center');
 }
 function drawGenerator(d){
-  var big=d.t==='lgen',n=big?3:2,w=n*TS/SPR;
+  var big=d.t==='lgen',w=sizeW(d.t)*TS/SPR,hh=sizeH(d.t)*TS/SPR;
   var lit=(d.fuel||0)>0,b=Math.sin(T*1.7+d.x)*1.1;
   shadow(big?44:30,big?12:9);
-  X.save();X.translate(0,(big?-44:-30)+b);
+  X.save();X.translate(0,(big?-44:-hh*0.5-8)+b);
   /* housing */
   rr(-w/2+4,-18,w-8,36,9);fill(big?'#5b6270':'#6d7484');line(COL.dark,3);
   X.fillStyle='rgba(255,255,255,.14)';rr(-w/2+4,-18,w-8,11,9);X.fill();
@@ -1812,7 +1896,7 @@ function drawHud(){
   txt('arrows',dxp,by+53,7,'#6a6590','center',false);
   txt('mined '+S.mined+'   sold '+S.sold+'   '+S.pts+' pts   '+ISLES.length+' island'+(ISLES.length>1?'s':''),430,by+18,9,'#8d88b5','left',false);
   txt('E stall  I inventory  [ ] switch island  right-click picks up',430,by+34,9,'#6a6590','left',false);
-  txt('crab landlord sells islands  -  ctrl+space hides the window',430,by+50,9,'#6a6590','left',false);
+  txt('right-click an islander to pick them up and move them',430,by+50,9,'#6a6590','left',false);
 }
 /* island switcher widget */
 var isleUI={l:{x:10,y:OY+6,w:20,h:22},r:{x:150,y:OY+6,w:20,h:22}};
@@ -2421,7 +2505,11 @@ C.addEventListener('contextmenu',function(e){
   var c=cell(mouse.gx,mouse.gy);
   if(!c)return;
   if(c.t==='deco'){askClearPalm(mouse.gx,mouse.gy);return;}
-  if(c.t==='stall'||c.t==='npc')return;
+  if(c.t==='stall'||c.t==='npc'){
+    var who=npcHere(mouse.gx,mouse.gy);
+    if(who)npcPickUp(who);
+    return;
+  }
   if(c.t==='belt'){
     S.dir=c.dir;S.tool='belt';
     removeAt(mouse.gx,mouse.gy);
@@ -2545,6 +2633,10 @@ C.addEventListener('mousedown',function(e){
     beep(620,0.06,'sine',0.05);return;
   }
   if(S.lore){S.lore=null;}
+  if(S.moveNpc){
+    if(mouse.in&&A.owned){npcDrop(mouse.gx,mouse.gy);return;}
+    return;
+  }
   var holding=S.stock[S.tool]>0;
   if(mouse.in&&A.owned&&!holding){
     var st=structAt(mouse.gx,mouse.gy);
@@ -2594,7 +2686,7 @@ C.addEventListener('mousedown',function(e){
       :ter==='water'?'That needs open water':(ter==='land'&&!isLand(mouse.gx,mouse.gy)?'That needs dry land':'No room there');
     S.hintT=1.5;beep(180,0.08,'sawtooth',0.035);return;}
   place(t2,mouse.gx,mouse.gy,S.dir);S.stock[t2]--;
-  sparkle(cx(mouse.gx)+TS/2*sizeOf(t2),cy(mouse.gy)+TS/2*sizeOf(t2),COL.gold,6);
+  sparkle(cx(mouse.gx)+TS/2*sizeW(t2),cy(mouse.gy)+TS/2*sizeH(t2),COL.gold,6);
   beep(700,0.05,'triangle',0.045);save();
 });
 function rotateHover(){
@@ -2631,7 +2723,7 @@ window.addEventListener('keydown',function(e){
   else if(k==='e'||k==='E'){S.shop=!S.shop;S.inv=false;S.parrot=false;S.land=false;S.sscroll=0;S.amtFocus=S.shop;}
   else if(k==='['){gotoIsle((S.isle-1+ISLES.length)%ISLES.length);}
   else if(k===']'){gotoIsle((S.isle+1)%ISLES.length);}
-  else if(k==='Escape'){S.shop=false;S.inv=false;S.parrot=false;S.land=false;S.power=false;S.scfg=null;S.ccfg=null;S.crabP=null;S.lore=null;S.confirm=null;S.linking=null;S.amtFocus=false;}
+  else if(k==='Escape'){if(S.moveNpc)npcCancelMove();S.shop=false;S.inv=false;S.parrot=false;S.land=false;S.power=false;S.scfg=null;S.ccfg=null;S.crabP=null;S.lore=null;S.confirm=null;S.linking=null;S.amtFocus=false;}
   else if(k==='r'||k==='R'){S.dir=(S.dir+1)%4;rotateHover();}
   else if(k.indexOf('Arrow')===0){
     e.preventDefault();
@@ -2661,7 +2753,7 @@ function save(){
     });
     localStorage.setItem('bitminer7',JSON.stringify({isles:isles,isle:S.isle,
       bag:S.bag,unl:S.unlocked,cur:S.cur,coins:S.coins,stock:S.stock,price:S.price,hist:S.hist,
-      mined:S.mined,sold:S.sold,pts:S.pts,rew:S.rew,supU:S.supUnlocked,gwU:S.gwUnlocked,ulU:S.ultraUnlocked,tut:S.tut,tfl:[S.didPickup?1:0,S.sawParrot?1:0,S.sawLand?1:0]}));
+      mined:S.mined,sold:S.sold,pts:S.pts,rew:S.rew,supU:S.supUnlocked,gwU:S.gwUnlocked,ulU:S.ultraUnlocked,tut:S.tut,tfl:[S.didPickup?1:0,S.sawParrot?1:0,S.sawLand?1:0],npcs:{stall:[STALL.x,STALL.y],parrot:[PARROT.x,PARROT.y],lord:[LORD.x,LORD.y],volt:VOLT?[VOLT.x,VOLT.y]:null}}));
   }catch(e){}
 }
 function load(){
@@ -2675,7 +2767,9 @@ function load(){
         I=genIsle(cat);ISLES.push(I);
       }
       if(di.name)I.name=di.name;
-      if(di.emp)I.emp=di.emp;
+      if(di.emp){I.emp=di.emp;
+        I.emp.wx=cx(I.emp.x)+TS/2;I.emp.wy=cy(I.emp.y)+TS-2;
+        if(inGrid(I.emp.x,I.emp.y)&&!I.cells[I.emp.y*GW+I.emp.x])I.cells[I.emp.y*GW+I.emp.x]={t:'npc'};}
       /* reset placeable cells (keep stall/npc/deco marks) */
       var back=A;A=I;
       if(idx===0){
@@ -2714,6 +2808,19 @@ function load(){
     S.supUnlocked=!!d.supU;S.gwUnlocked=!!d.gwU;S.ultraUnlocked=!!d.ulU;
     S.tut=(d.tut===undefined)?TUT.length:d.tut;
     if(d.tfl){S.didPickup=!!d.tfl[0];S.sawParrot=!!d.tfl[1];S.sawLand=!!d.tfl[2];}
+    if(d.npcs){
+      var backI=A,backC=CURI;A=HOME;CURI=HOME;
+      ['stall','parrot','lord','volt'].forEach(function(k){
+        var pos=d.npcs[k];
+        if(!pos||(k==='volt'&&!VOLT))return;
+        var cur=npcOrigin(k);
+        if(!cur||(cur[0]===pos[0]&&cur[1]===pos[1]))return;
+        npcCells(k,cur[0],cur[1],false);
+        if(npcCanSit(k,pos[0],pos[1]))npcPlace(k,pos[0],pos[1]);
+        else npcPlace(k,cur[0],cur[1]);
+      });
+      A=backI;CURI=backC;
+    }
     gotoIsle(clamp(d.isle||0,0,ISLES.length-1));
     S.hint='Welcome back!';S.hintT=2;
   }catch(e){}
@@ -2857,10 +2964,18 @@ function render(){
     else if(fs.t==='scan')drawScanFlat(fs);
     else if(fs.t==='sep')drawSepFlat(fs);
     else if(fs.t==='gw')drawGwFlat(fs);}
-  if(mouse.in&&!S.shop&&!S.inv&&!S.parrot&&!S.land&&S.stock[S.tool]>0){
-    var t=S.tool,n=sizeOf(t),ok=canPlace(t,mouse.gx,mouse.gy);
+  if(S.moveNpc&&mouse.in){
+    var f=NPCFOOT[S.moveNpc.key],okN=npcCanSit(S.moveNpc.key,mouse.gx,mouse.gy);
     X.globalAlpha=0.55;
-    rr(cx(mouse.gx)+2,cy(mouse.gy)+2,n*TS-4,n*TS-4,7);
+    rr(cx(mouse.gx)+2,cy(mouse.gy)+2,f[0]*TS-4,f[1]*TS-4,7);
+    fill(okN?'rgba(120,255,160,.35)':'rgba(255,110,110,.35)');
+    line(okN?'#7dffa4':'#ff6e6e',2.5);
+    X.globalAlpha=1;
+  }
+  if(mouse.in&&!S.moveNpc&&!S.shop&&!S.inv&&!S.parrot&&!S.land&&S.stock[S.tool]>0){
+    var t=S.tool,ok=canPlace(t,mouse.gx,mouse.gy);
+    X.globalAlpha=0.55;
+    rr(cx(mouse.gx)+2,cy(mouse.gy)+2,sizeW(t)*TS-4,sizeH(t)*TS-4,7);
     fill(ok?'rgba(120,255,160,.35)':'rgba(255,110,110,.35)');
     line(ok?'#7dffa4':'#ff6e6e',2.5);
     if(t==='belt'||t==='scan'||t==='gate'){
@@ -2871,17 +2986,19 @@ function render(){
   var list=[];
   for(var s3=0;s3<A.structs.length;s3++){var st=A.structs[s3];
     if(st.t==='gate'||st.t==='scan'||st.t==='sep')continue;
-    var nn=sizeOf(st.t);
-    list.push({wy:cy(st.y)+TS*nn-4,wx:cx(st.x)+TS*nn/2,k:st.t,o:st});}
+    list.push({wy:cy(st.y)+TS*sizeH(st.t)-4,wx:cx(st.x)+TS*sizeW(st.t)/2,k:st.t,o:st});}
+  var carrying=S.moveNpc?S.moveNpc.key:null;
   if(CURI.home){
-    list.push({wy:STALL.wy-1,wx:M.x,k:'mantis'});
-    list.push({wy:STALL.wy,wx:STALL.wx,k:'stall'});
-    list.push({wy:PARROT.wy,wx:PARROT.wx,k:'parrot'});
-    list.push({wy:LORD.wy,wx:LORD.wx,k:'lord'});
+    if(carrying!=='stall'){
+      list.push({wy:STALL.wy-1,wx:M.x,k:'mantis'});
+      list.push({wy:STALL.wy,wx:STALL.wx,k:'stall'});
+    }
+    if(carrying!=='parrot')list.push({wy:PARROT.wy,wx:PARROT.wx,k:'parrot'});
+    if(carrying!=='lord')list.push({wy:LORD.wy,wx:LORD.wx,k:'lord'});
   }
   if(CURI.npc&&CURI.npcSpot)list.push({wy:CURI.npcSpot.wy,wx:CURI.npcSpot.wx,k:'npcc'});
-  if(CURI.home&&VOLT)list.push({wy:VOLT.wy,wx:VOLT.wx,k:'volt'});
-  if(CURI.emp)list.push({wy:CURI.emp.wy,wx:CURI.emp.wx,k:'emp',o:CURI.emp});
+  if(CURI.home&&VOLT&&carrying!=='volt')list.push({wy:VOLT.wy,wx:VOLT.wx,k:'volt'});
+  if(CURI.emp&&carrying!=='emp')list.push({wy:CURI.emp.wy,wx:CURI.emp.wx,k:'emp',o:CURI.emp});
   for(var pl=0;pl<A.palms.length;pl++)list.push({wy:cy(A.palms[pl].y)+TS-4,wx:cx(A.palms[pl].x)+TS/2,k:'palm',o:A.palms[pl]});
   for(var it3=0;it3<A.items.length;it3++){var it=A.items[it3],bi2=beltInfo(it.cx,it.cy);
     var d2=bi2?bi2.dir:0;
@@ -2922,6 +3039,17 @@ function render(){
     X.beginPath();X.arc(sp2.x,sp2.y,2.4,0,6.3);X.fill();X.globalAlpha=1;}
   for(var p3=0;p3<S.pops.length;p3++){var q3=S.pops[p3];
     X.globalAlpha=clamp(q3.a,0,1);txt(q3.t,q3.x,q3.y-20,11,q3.c,'center');X.globalAlpha=1;}
+  if(S.moveNpc&&mouse.in){
+    var mk=S.moveNpc.key,f2=NPCFOOT[mk];
+    X.save();X.translate(cx(mouse.gx)+f2[0]*TS/2,cy(mouse.gy)+f2[1]*TS-4);X.scale(SPR,SPR);
+    X.globalAlpha=0.85;
+    if(mk==='stall'){drawStall();drawMantis();}
+    else if(mk==='parrot')drawParrot();
+    else if(mk==='lord')drawLord();
+    else if(mk==='volt')drawVolt();
+    else if(mk==='emp')drawEmployee(CURI.emp);
+    X.globalAlpha=1;X.restore();
+  }
   if(S.scfg&&!S.shop&&!S.inv&&!S.parrot&&!S.land)drawScfg();
   if(S.ccfg&&!S.shop&&!S.inv&&!S.parrot&&!S.land)drawCcfg();
   if(S.crabP&&!S.shop&&!S.inv&&!S.parrot&&!S.land)drawCrabP();
