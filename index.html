@@ -453,6 +453,10 @@ var VOLT=(function(){
     var sc=clearance(x+1,y+1);
     if(sc>bs){bs=sc;best={x:x,y:y};}
   }
+  if(!best){
+    for(var y2=1;y2<GH-3&&!best;y2++)for(var x2=1;x2<GW-2&&!best;x2++)
+      if(canPlace('gen',x2,y2))best={x:x2,y:y2};
+  }
   if(!best)return null;
   var g=place('gen',best.x,best.y,0);
   var spot={x:g.x,y:g.y+3};
@@ -1962,31 +1966,85 @@ function drawPalm(p){
   X.beginPath();X.arc(sw+11,-36,3,0,6.3);X.fill();
   X.restore();
 }
+function mantisBody(scale,armPhase,blink,apron){
+  /* a proper mantis: slim abdomen, upright pronotum, wedge head with corner
+     eyes, and folded raptorial forearms held in front */
+  X.save();X.scale(scale,scale);
+  var sway=Math.sin(armPhase)*0.9;
+  /* walking legs */
+  X.strokeStyle='#1f9c78';X.lineWidth=2.6;X.lineCap='round';
+  for(var L=0;L<2;L++){
+    var side=L?1:-1;
+    X.beginPath();X.moveTo(side*3,-9);
+    X.quadraticCurveTo(side*11,-6,side*9,1);X.stroke();
+    X.beginPath();X.moveTo(side*3,-14);
+    X.quadraticCurveTo(side*12,-12,side*12,-4);X.stroke();
+  }
+  /* abdomen, tilted back a little */
+  X.save();X.rotate(-0.12);
+  X.beginPath();X.ellipse(0,-16,7.5,13,0,0,6.3);fill(COL.mant2);line(COL.mantD,2.2);
+  /* wing case */
+  X.beginPath();X.ellipse(1.5,-18,5.4,10.5,0.06,0,6.3);fill(COL.mant);
+  X.globalAlpha=0.45;X.strokeStyle=COL.mantD;X.lineWidth=0.9;X.stroke();
+  X.beginPath();X.moveTo(1.5,-27);X.lineTo(1.5,-9);X.stroke();X.globalAlpha=1;
+  X.restore();
+  if(apron){
+    rr(-5,-16,10,9,3);fill(COL.gold);line(COL.mantD,1.8);
+    X.fillStyle=COL.mantD;X.beginPath();X.arc(0,-11.5,1.1,0,6.3);X.fill();
+  }
+  /* pronotum: the long neck segment that makes a mantis a mantis */
+  X.save();X.rotate(0.06+sway*0.02);
+  rr(-3.4,-38,6.8,17,3);fill(COL.mant);line(COL.mantD,2);
+  X.restore();
+  /* raptorial forearms, folded in front */
+  for(var a2=0;a2<2;a2++){
+    var sd=a2?1:-1,f=sway*(a2?1:-1);
+    X.save();X.translate(sd*2.5,-34);
+    X.strokeStyle=COL.mant;X.lineWidth=3.4;X.lineCap='round';X.lineJoin='round';
+    X.beginPath();X.moveTo(0,0);X.lineTo(sd*7,6+f);X.stroke();          /* upper arm out */
+    X.strokeStyle=COL.mant2;X.lineWidth=3;
+    X.beginPath();X.moveTo(sd*7,6+f);X.lineTo(sd*4.5,-3+f);X.stroke();  /* forearm folded back */
+    X.strokeStyle=COL.mantD;X.lineWidth=0.9;
+    for(var t2=0;t2<3;t2++){
+      var u=0.25+t2*0.25;
+      X.beginPath();
+      X.moveTo(sd*(7+(4.5-7)*u),6+f+(-3-6)*u);
+      X.lineTo(sd*(7+(4.5-7)*u)-sd*2,6+f+(-3-6)*u+0.5);X.stroke();
+    }
+    X.restore();
+  }
+  /* head: wedge, widest at the top, eyes on the corners */
+  X.save();X.translate(0,-41);X.rotate(sway*0.03);
+  X.beginPath();
+  X.moveTo(-7.5,-4);X.lineTo(7.5,-4);
+  X.quadraticCurveTo(5.5,5.5,0,6);X.quadraticCurveTo(-5.5,5.5,-7.5,-4);
+  X.closePath();fill(COL.mant);line(COL.mantD,2.1);
+  for(var e2=0;e2<2;e2++){
+    var sd2=e2?1:-1;
+    X.beginPath();X.ellipse(sd2*4.6,-2.6,3.1,3.6*(blink?0.18:1),sd2*0.25,0,6.3);
+    fill('#ffffff');line(COL.mantD,1.5);
+    if(!blink){
+      X.fillStyle=COL.dark;X.beginPath();X.arc(sd2*4.9,-2.4,1.5,0,6.3);X.fill();
+      X.fillStyle='#fff';X.beginPath();X.arc(sd2*4.3,-3.4,0.6,0,6.3);X.fill();
+    }
+  }
+  X.strokeStyle=COL.mantD;X.lineWidth=1.1;
+  X.beginPath();X.arc(0,1.4,2,0.35,2.79);X.stroke();
+  /* antennae */
+  X.strokeStyle=COL.mantD;X.lineWidth=1.4;X.lineCap='round';
+  X.beginPath();X.moveTo(-3.5,-4);X.quadraticCurveTo(-8,-11,-5.5+Math.sin(armPhase*1.4)*1.6,-15);X.stroke();
+  X.beginPath();X.moveTo(3.5,-4);X.quadraticCurveTo(8,-11,5.5+Math.cos(armPhase*1.2)*1.6,-15);X.stroke();
+  X.restore();
+  X.restore();
+}
 function drawMantis(){
-  var w=Math.sin(M.ph)*1.0,walk=Math.sin(M.ph*2);
-  shadow(14,5);
-  X.save();X.translate(0,-16+w);X.scale(M.face*1.25,1.25);
-  X.strokeStyle='#1f9c78';X.lineWidth=3;X.lineCap='round';
-  for(var i=0;i<2;i++){var o=(i-1)*6;
-    X.beginPath();X.moveTo(o,4);X.quadraticCurveTo(o-5,9,o-7,12);X.stroke();}
-  X.save();X.rotate(-0.25);rr(-16,-4,20,13,6);fill(COL.mant2);line(COL.mantD,2.4);X.restore();
-  rr(-5,-12,13,18,6);fill(COL.mant);line(COL.mantD,2.4);
-  rr(-4,-2,11,9,3);fill(COL.gold);line(COL.mantD,2);
-  X.strokeStyle=COL.mant;X.lineWidth=4;
-  X.beginPath();X.moveTo(6,-6);X.lineTo(13,-2+walk*1.5);X.lineTo(8,4+walk*1.5);X.stroke();
-  X.strokeStyle=COL.mantD;X.lineWidth=1.2;
-  X.beginPath();X.moveTo(13,-2+walk*1.5);X.lineTo(8,4+walk*1.5);X.stroke();
-  X.save();X.translate(4,-16);X.rotate(0.12);
-  X.beginPath();X.moveTo(-7,4);X.lineTo(9,-2);X.lineTo(-3,-8);X.closePath();fill(COL.mant);line(COL.mantD,2.4);
-  var bl=M.blink>0?0.2:1;
-  X.fillStyle='#fff';X.beginPath();X.ellipse(2,-3,4,4*bl,0,0,6.3);X.fill();line(COL.mantD,1.6);
-  X.fillStyle=COL.dark;X.beginPath();X.arc(3,-3,1.8*bl+0.4,0,6.3);X.fill();
-  X.strokeStyle=COL.mantD;X.lineWidth=1.6;
-  X.beginPath();X.moveTo(4,-7);X.quadraticCurveTo(10,-16,6+Math.sin(T*3)*3,-20);X.stroke();
-  X.beginPath();X.moveTo(1,-8);X.quadraticCurveTo(4,-17,-1+Math.cos(T*2.6)*3,-21);X.stroke();
-  X.restore();X.restore();
+  var bob=Math.sin(M.ph)*1.1;
+  shadow(12,4.5);
+  X.save();X.translate(0,bob);X.scale(M.face,1);
+  mantisBody(1.05,M.ph,M.blink>0,true);
+  X.restore();
   if(!S.shop&&M.talk>0){
-    var by=-64+Math.sin(T*2)*2;
+    var by=-72+Math.sin(T*2)*2;
     rr(-16,by-11,32,22,8);fill(COL.cream);line(COL.dark,2.5);
     X.beginPath();X.moveTo(-4,by+10);X.lineTo(2,by+17);X.lineTo(4,by+10);X.closePath();fill(COL.cream);
     txt('!!',0,by,13,COL.pink,'center');
@@ -2308,36 +2366,9 @@ function shopRows(){
   return rows;
 }
 function drawShopMantis(px,py,w){
-  /* she leans in over the counter while you browse */
-  var b=Math.sin(T*1.6)*2.4,lean=Math.sin(T*0.9)*0.05;
-  X.save();X.translate(px+w-74,py-30+b);X.scale(2.5,2.5);X.rotate(lean);
-  /* raptorial arm resting on the panel edge */
-  X.strokeStyle=COL.mant;X.lineWidth=4.5;X.lineCap='round';
-  X.beginPath();X.moveTo(5,-4);X.lineTo(13,2+Math.sin(T*1.3)*0.8);X.lineTo(6,8);X.stroke();
-  X.strokeStyle=COL.mantD;X.lineWidth=1.4;
-  X.beginPath();X.moveTo(13,2+Math.sin(T*1.3)*0.8);X.lineTo(6,8);X.stroke();
-  X.strokeStyle=COL.mant;X.lineWidth=4.5;
-  X.beginPath();X.moveTo(-6,-4);X.lineTo(-14,2+Math.cos(T*1.5)*0.8);X.lineTo(-7,8);X.stroke();
-  X.strokeStyle=COL.mantD;X.lineWidth=1.4;
-  X.beginPath();X.moveTo(-14,2+Math.cos(T*1.5)*0.8);X.lineTo(-7,8);X.stroke();
-  /* thorax + apron */
-  rr(-7,-12,15,20,7);fill(COL.mant);line(COL.mantD,2.4);
-  rr(-6,-1,13,10,3);fill(COL.gold);line(COL.mantD,2);
-  X.fillStyle=COL.mantD;X.beginPath();X.arc(0.5,3.5,1.4,0,6.3);X.fill();
-  /* head */
-  X.save();X.translate(0,-15);X.rotate(0.08+Math.sin(T*1.1)*0.04);
-  X.beginPath();X.moveTo(-9,4);X.lineTo(10,-1);X.lineTo(-2,-9);X.closePath();
-  fill(COL.mant);line(COL.mantD,2.4);
-  var bl=M.blink>0?0.2:1;
-  X.fillStyle='#fff';X.beginPath();X.ellipse(2,-3,4.4,4.4*bl,0,0,6.3);X.fill();line(COL.mantD,1.6);
-  X.fillStyle=COL.dark;X.beginPath();X.arc(3,-3,2*bl+0.4,0,6.3);X.fill();
-  X.fillStyle='#fff';X.beginPath();X.arc(2.2,-4,0.9,0,6.3);X.fill();
-  X.fillStyle='#fff';X.beginPath();X.ellipse(-4,-2,3.2,3.2*bl,0,0,6.3);X.fill();line(COL.mantD,1.4);
-  X.fillStyle=COL.dark;X.beginPath();X.arc(-3.4,-2,1.5*bl+0.3,0,6.3);X.fill();
-  X.strokeStyle=COL.mantD;X.lineWidth=1.6;X.lineCap='round';
-  X.beginPath();X.moveTo(2,-8);X.quadraticCurveTo(9,-17,5+Math.sin(T*2.4)*3,-22);X.stroke();
-  X.beginPath();X.moveTo(-2,-9);X.quadraticCurveTo(1,-18,-4+Math.cos(T*2.1)*3,-23);X.stroke();
-  X.restore();
+  var lean=Math.sin(T*0.9)*0.04,bob=Math.sin(T*1.6)*2.2;
+  X.save();X.translate(px+w-78,py+34+bob);X.rotate(lean);
+  mantisBody(2.6,T*1.3,M.blink>0,true);
   X.restore();
 }
 function drawShop(){
@@ -3225,6 +3256,46 @@ function save(){
       mined:S.mined,sold:S.sold,bank:S.bank,pts:S.pts,rew:S.rew,supU:S.supUnlocked,gwU:S.gwUnlocked,ulU:S.ultraUnlocked,tut:S.tut,tfl:[S.didPickup?1:0,S.sawParrot?1:0,S.sawLand?1:0],npcs:{stall:[STALL.x,STALL.y],parrot:[PARROT.x,PARROT.y],lord:[LORD.x,LORD.y],volt:VOLT?[VOLT.x,VOLT.y]:null}}));
   }catch(e){}
 }
+function ensureGenerators(){
+  var back=A,i;
+  if(VOLT){
+    A=HOME;
+    if(!genOf(HOME)){
+      var g=null;
+      if(canPlace('gen',VOLT.gen.x,VOLT.gen.y))g=place('gen',VOLT.gen.x,VOLT.gen.y,0);
+      for(var y=1;y<GH-3&&!g;y++)for(var x=1;x<GW-2&&!g;x++)
+        if(canPlace('gen',x,y))g=place('gen',x,y,0);
+      if(g){
+        g.fuel=(g.fuel===undefined?150:g.fuel);
+        VOLT.gen=g;
+        if(!isLand(VOLT.x,VOLT.y)||(HOME.cells[VOLT.y*GW+VOLT.x]||{}).t!=='npc'){
+          var sx=g.x,sy=g.y+sizeH('gen');
+          if(isLand(sx,sy)&&!HOME.cells[sy*GW+sx]){
+            HOME.cells[sy*GW+sx]={t:'npc'};
+            VOLT.x=sx;VOLT.y=sy;VOLT.wx=cx(sx)+TS/2;VOLT.wy=cy(sy)+TS-2;
+          }
+        }
+      }
+    }
+  }
+  for(i=1;i<ISLES.length;i++){
+    var I=ISLES[i];
+    if(!I.owned)continue;
+    A=I;
+    if(genOf(I))continue;
+    var lg=null;
+    for(var y2=1;y2<GH-3&&!lg;y2++)for(var x2=1;x2<GW-2&&!lg;x2++)
+      if(canPlace('lgen',x2,y2))lg=place('lgen',x2,y2,0);
+    if(!lg)continue;
+    if(!I.emp){
+      var emp=EMPLOYEES[i%EMPLOYEES.length];
+      I.emp={name:emp.name,c1:emp.c1,c2:emp.c2,x:lg.x,y:lg.y+sizeH('lgen'),
+        wx:cx(lg.x)+TS,wy:cy(lg.y)+TS*(sizeH('lgen')+0.9)};
+      if(inGrid(I.emp.x,I.emp.y)&&!I.cells[I.emp.y*GW+I.emp.x])I.cells[I.emp.y*GW+I.emp.x]={t:'npc'};
+    }
+  }
+  A=back;
+}
 function load(){
   try{
     var d=JSON.parse(localStorage.getItem('bitminer7'));if(!d)return;
@@ -3291,6 +3362,7 @@ function load(){
       });
       A=backI;CURI=backC;
     }
+    ensureGenerators();
     gotoIsle(clamp(d.isle||0,0,ISLES.length-1));
     S.hint='Welcome back!';S.hintT=2;
   }catch(e){}
