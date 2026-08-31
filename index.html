@@ -52,7 +52,7 @@ var TERRAIN={belt:'both',scan:'both',gate:'both',sep:'both',gw:'both',crab:'land
   aqua:'water',dredge:'water'};
 var PRICES={belt:25,mini:150,miner:600,seller:400,scan:120,gate:120,sep:200,gen:0,lgen:0,comp:900,craft:1200,sup:9000,gw:15000,aqua:1400,dredge:450,crab:1500,ult:30000};
 function sizeOf(t){return SIZES[t]||1;}
-var SIZEW={gen:2},SIZEH={gen:3};          /* anything not listed is square */
+var SIZEW={gen:2,lgen:2},SIZEH={gen:3,lgen:3};   /* anything not listed is square */
 function sizeW(t){return SIZEW[t]||sizeOf(t);}
 function sizeH(t){return SIZEH[t]||sizeOf(t);}
 function sellback(t){return Math.floor((PRICES[t]||0)*0.6);}
@@ -1010,8 +1010,8 @@ function buyIsle(cat){
   var lg=drop('lgen',Math.round(GW/2)+6,Math.round(GH/2)-1);
   if(lg){
     var emp=EMPLOYEES[ISLES.length%EMPLOYEES.length];
-    I.emp={name:emp.name,c1:emp.c1,c2:emp.c2,x:lg.x,y:lg.y+sizeOf('lgen'),
-      wx:cx(lg.x)+TS*1.5,wy:cy(lg.y)+TS*(sizeOf('lgen')+0.9)};
+    I.emp={name:emp.name,c1:emp.c1,c2:emp.c2,x:lg.x,y:lg.y+sizeH('lgen'),
+      wx:cx(lg.x)+TS,wy:cy(lg.y)+TS*(sizeH('lgen')+0.9)};
   }
   drop('crab',Math.round(GW/2)-7,Math.round(GH/2)+3);
   A=back;
@@ -1558,8 +1558,8 @@ function drawNpcCritter(n){
 function drawGenerator(d){
   var big=d.t==='lgen',w=sizeW(d.t)*TS/SPR,hh=sizeH(d.t)*TS/SPR;
   var lit=(d.fuel||0)>0,b=Math.sin(T*1.7+d.x)*1.1;
-  shadow(big?44:30,big?12:9);
-  X.save();X.translate(0,(big?-44:-hh*0.5-8)+b);
+  shadow(w*0.44,big?11:9);
+  X.save();X.translate(0,-hh*0.5-8+b);
   /* housing */
   rr(-w/2+4,-18,w-8,36,9);fill(big?'#5b6270':'#6d7484');line(COL.dark,3);
   X.fillStyle='rgba(255,255,255,.14)';rr(-w/2+4,-18,w-8,11,9);X.fill();
