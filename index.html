@@ -47,7 +47,7 @@ var CURS=['mini','bit','large','sup','shell','pearl'];
 
 /* ---------- machine catalogue ---------- */
 var SIZES={belt:1,mini:1,scan:1,gate:1,dredge:1,miner:2,seller:2,sup:2,comp:2,craft:2,aqua:2,crab:2,gw:3};
-var TERRAIN={belt:'both',scan:'both',gate:'both',gw:'both',crab:'both',
+var TERRAIN={belt:'both',scan:'both',gate:'both',gw:'both',crab:'land',
   miner:'land',mini:'land',sup:'land',seller:'land',comp:'land',craft:'land',
   aqua:'water',dredge:'water'};
 var PRICES={belt:14,mini:60,miner:160,seller:110,scan:45,gate:45,comp:220,craft:260,sup:650,gw:950,aqua:260,dredge:90,crab:320};
@@ -225,7 +225,7 @@ var S={bag:{mini:0,bit:0,large:0,sup:0,anom:0,shell:0,pearl:0},
   shop:false,inv:false,parrot:false,land:false,ltab:'own',scfg:null,ccfg:null,linking:null,crabP:null,lore:null,loreN:0,
   amt:'',amtFocus:false,sscroll:0,sscrollMax:0,iscroll:0,iscrollMax:0,lscroll:0,lscrollMax:0,
   renIdx:-1,renTxt:'',
-  sold:0,mined:0,tut:0,tutT:0,pops:[],spark:[],
+  sold:0,mined:0,tut:0,tutT:0,didPickup:false,sawParrot:false,sawLand:false,pops:[],spark:[],
   hint:'Visit the mantis stall to trade',hintT:6};
 
 function canPlace(t,x,y){var n=sizeOf(t),ter=TERRAIN[t]||'land';
@@ -322,11 +322,18 @@ var TUT=[
  'Buy a MINI MINER (60c) - the cheap little one',
  'Press I, pick the mini miner, then left-click a grass square',
  'It flings gems around itself - click them to collect',
- 'Buy an AUTO SELLER + CONVEYORS. Belts feed it; arrow keys turn them',
- 'Sell bit at the stall when the price looks good. The island is yours!'
+ 'Buy an AUTO SELLER + CONVEYORS at the stall',
+ 'Place a belt next to your miner - arrow keys set its direction',
+ 'Now sell: open the stall, type an amount, press SELL',
+ 'Right-click any machine to pick it up and move it',
+ 'Mining earns points - click the red parrot to spend them on prizes',
+ 'The crab in the top hat sells whole islands. Say hello!',
+ 'That is everything - grow, automate, and explore. Have fun!'
 ];
 function anyMiner(){return ISLES.some(function(I){return I.structs.some(function(x){return x.t==='mini'||x.t==='miner'||x.t==='sup'||x.t==='aqua'||x.t==='dredge';});});}
 function bagTotal(){var n=0;for(var k in S.bag)n+=S.bag[k];return n;}
+function anyBelt(){return ISLES.some(function(I){if(!I.owned)return false;
+  for(var q=0;q<GW*GH;q++)if(I.cells[q]&&I.cells[q].t==='belt')return true;return false;});}
 function tutStep(dt){
   if(S.tut>=TUT.length)return;
   if(S.tut===0&&S.shop)S.tut=1;
@@ -334,7 +341,12 @@ function tutStep(dt){
   else if(S.tut===2&&anyMiner())S.tut=3;
   else if(S.tut===3&&bagTotal()>0)S.tut=4;
   else if(S.tut===4&&ISLES.some(function(I){return I.structs.some(function(x){return x.t==='seller';});}))S.tut=5;
-  else if(S.tut===5){S.tutT+=dt;if(S.tutT>12){S.tut=6;save();}}
+  else if(S.tut===5&&anyBelt())S.tut=6;
+  else if(S.tut===6&&S.sold>0)S.tut=7;
+  else if(S.tut===7&&S.didPickup)S.tut=8;
+  else if(S.tut===8&&S.sawParrot)S.tut=9;
+  else if(S.tut===9&&S.sawLand)S.tut=10;
+  else if(S.tut===10){S.tutT+=dt;if(S.tutT>10){S.tut=11;save();}}
 }
 var tutSkip={x:0,y:0,w:0,h:0};
 function drawTut(){
@@ -375,6 +387,15 @@ function unlock(k){
   S.hint=KINDNAME[k]+' unlocked as a currency at the stall!';S.hintT=4;M.talk=2;
 }
 function gain(k,n){S.bag[k]+=n;unlock(k);}
+function chaChing(big){
+  /* an unmissable little till fanfare */
+  var seq=big?[[392,0],[523,70],[659,140],[784,210],[1047,300],[1319,380]]
+             :[[523,0],[659,80],[784,160],[1047,250]];
+  seq.forEach(function(nt){
+    setTimeout(function(){beep(nt[0],0.12,'square',0.09);beep(nt[0]*2,0.1,'sine',0.05);},nt[1]);
+  });
+  setTimeout(function(){beep(2093,0.18,'sine',0.06);},big?480:330);
+}
 function priceOf(k){return S.price*MULT[k];}
 
 /* ---------- mining ---------- */
@@ -587,7 +608,7 @@ function buy(kind,cost){
   if(S.coins<cost){S.hint='Not enough coins';S.hintT=2;beep(160,0.12,'sawtooth',0.04);return;}
   S.coins-=cost;S.stock[kind]++;
   S.hint='Bought a '+itemName(kind).toLowerCase()+' - it is in your inventory';
-  S.hintT=3.5;beep(740,0.07,'triangle',0.05);save();
+  S.hintT=3.5;chaChing(false);save();
 }
 function sellMachine(kind){
   if(S.stock[kind]<=0)return;
@@ -682,7 +703,7 @@ function buyIsle(cat){
   A=back;
   S.stock.gw++;
   S.hint=cat.name+' is yours! It has a gateway - place your free one to link it';S.hintT=5;
-  beep(700,0.08,'triangle',0.06);setTimeout(function(){beep(1050,0.1,'triangle',0.06);},90);
+  chaChing(true);
   save();
 }
 
@@ -1468,8 +1489,8 @@ function drawIsleUI(){
   txt(CURI.name,91,OY+15,9,COL.cream,'center');
   txt((S.isle+1)+'/'+ISLES.length,91,OY+25,7,'#6a6590','center',false);
   if(!CURI.owned){
-    rr(180,OY+4,62,26,8);fill('#5a2330');line('#ff6b6b',2);
-    txt('leave',211,OY+17,9,'#ffb3b3','center');
+    rr(8,OY+34,80,24,8);fill('#5a2330');line('#ff6b6b',2);
+    txt('leave island',48,OY+46,8,'#ffb3b3','center');
   }
 }
 
@@ -1878,8 +1899,8 @@ function drawCrabP(){
   txt('"The boss lets me do everything!"',px+14,py+34,8,'#c9926d','left',false);
   crabBtns=[];
   var rows=[['TRADE - the mantis desk',function(){S.crabP=null;S.shop=true;S.sscroll=0;S.amtFocus=true;}],
-            ['PRIZES - the parrot desk',function(){S.crabP=null;S.parrot=true;}],
-            ['ISLANDS - the property desk',function(){S.crabP=null;S.land=true;S.lscroll=0;}]];
+            ['PRIZES - the parrot desk',function(){S.crabP=null;S.parrot=true;S.sawParrot=true;}],
+            ['ISLANDS - the property desk',function(){S.crabP=null;S.land=true;S.sawLand=true;S.lscroll=0;}]];
   for(var i=0;i<3;i++){
     var ry=py+46+i*38;
     rr(px+14,ry,pw-28,32,8);fill('#5a3820');line('#ff6a3d',2);
@@ -1964,6 +1985,7 @@ C.addEventListener('contextmenu',function(e){
     S.tool=kind;
     S.hint='Picked up the '+itemName(kind).toLowerCase()+' - left-click to put it down';
   } else return;
+  S.didPickup=true;
   S.hintT=3;
   sparkle(cx(mouse.gx)+TS/2,cy(mouse.gy)+TS/2,'#ffe9a3',6);
   beep(420,0.06,'square',0.04);save();
@@ -2022,7 +2044,7 @@ C.addEventListener('mousedown',function(e){
     S.scfg=null;S.linking=null;
   }
   /* leave a visited island */
-  if(!CURI.owned&&mouse.sx>=180&&mouse.sx<=242&&mouse.sy>=OY+4&&mouse.sy<=OY+30){
+  if(!CURI.owned&&mouse.sx>=8&&mouse.sx<=88&&mouse.sy>=OY+34&&mouse.sy<=OY+58){
     dropTempIsles();gotoIsle(0);
     S.hint='Back home';S.hintT=2;beep(600,0.05,'sine',0.04);return;
   }
@@ -2041,8 +2063,8 @@ C.addEventListener('mousedown',function(e){
   if(S.tut<TUT.length&&mouse.sx>=tutSkip.x&&mouse.sx<=tutSkip.x+tutSkip.w&&mouse.sy>=tutSkip.y&&mouse.sy<=tutSkip.y+tutSkip.h){
     S.tut=TUT.length;S.hint='Tutorial skipped';S.hintT=2;beep(400,0.05,'sine',0.04);save();return;}
   if(overStall()){S.shop=true;S.sscroll=0;S.amtFocus=true;M.talk=0;beep(520,0.09,'triangle',0.05);return;}
-  if(overParrot()){S.parrot=true;beep(560,0.08,'triangle',0.05);return;}
-  if(overLord()){S.land=true;S.lscroll=0;beep(500,0.08,'triangle',0.05);return;}
+  if(overParrot()){S.parrot=true;S.sawParrot=true;beep(560,0.08,'triangle',0.05);return;}
+  if(overLord()){S.land=true;S.sawLand=true;S.lscroll=0;beep(500,0.08,'triangle',0.05);return;}
   /* npc islander chat */
   if(A.npc&&A.npcSpot&&Math.abs(mouse.sx-A.npcSpot.wx)<26&&mouse.sy>A.npcSpot.wy-56&&mouse.sy<A.npcSpot.wy+10){
     if(S.lore===A.npc)S.loreN=(S.loreN+1)%A.npc.lore.length;
@@ -2149,7 +2171,7 @@ function save(){
     });
     localStorage.setItem('bitminer7',JSON.stringify({isles:isles,isle:S.isle,
       bag:S.bag,unl:S.unlocked,cur:S.cur,coins:S.coins,stock:S.stock,price:S.price,hist:S.hist,
-      mined:S.mined,sold:S.sold,pts:S.pts,rew:S.rew,supU:S.supUnlocked,gwU:S.gwUnlocked,tut:S.tut}));
+      mined:S.mined,sold:S.sold,pts:S.pts,rew:S.rew,supU:S.supUnlocked,gwU:S.gwUnlocked,tut:S.tut,tfl:[S.didPickup?1:0,S.sawParrot?1:0,S.sawLand?1:0]}));
   }catch(e){}
 }
 function load(){
@@ -2199,6 +2221,7 @@ function load(){
     S.mined=d.mined||0;S.sold=d.sold||0;S.pts=d.pts||0;S.rew=d.rew||0;
     S.supUnlocked=!!d.supU;S.gwUnlocked=!!d.gwU;
     S.tut=(d.tut===undefined)?TUT.length:d.tut;
+    if(d.tfl){S.didPickup=!!d.tfl[0];S.sawParrot=!!d.tfl[1];S.sawLand=!!d.tfl[2];}
     gotoIsle(clamp(d.isle||0,0,ISLES.length-1));
     S.hint='Welcome back!';S.hintT=2;
   }catch(e){}
