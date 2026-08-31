@@ -46,13 +46,42 @@ var KINDNAME={mini:'MINI BIT',bit:'BIT',large:'LARGE BIT',sup:'SUPER BIT',anom:'
 var CURS=['mini','bit','shell','large','pearl','sup','lsup','ultra','lultra'];
 
 /* ---------- machine catalogue ---------- */
-var SIZES={belt:1,mini:1,scan:1,gate:1,sep:1,dredge:1,miner:2,seller:2,sup:2,ult:2,comp:2,craft:2,aqua:2,crab:2,gw:3};
-var TERRAIN={belt:'both',scan:'both',gate:'both',sep:'both',gw:'both',crab:'land',
+var SIZES={belt:1,mini:1,scan:1,gate:1,sep:1,dredge:1,gen:2,lgen:3,miner:2,seller:2,sup:2,ult:2,comp:2,craft:2,aqua:2,crab:2,gw:3};
+var TERRAIN={belt:'both',scan:'both',gate:'both',sep:'both',gw:'both',crab:'land',gen:'both',lgen:'both',
   miner:'land',mini:'land',sup:'land',ult:'land',seller:'land',comp:'land',craft:'land',
   aqua:'water',dredge:'water'};
-var PRICES={belt:25,mini:150,miner:600,seller:400,scan:120,gate:120,sep:200,comp:900,craft:1200,sup:9000,gw:15000,aqua:1400,dredge:450,crab:1500,ult:30000};
+var PRICES={belt:25,mini:150,miner:600,seller:400,scan:120,gate:120,sep:200,gen:0,lgen:0,comp:900,craft:1200,sup:9000,gw:15000,aqua:1400,dredge:450,crab:1500,ult:30000};
 function sizeOf(t){return SIZES[t]||1;}
 function sellback(t){return Math.floor((PRICES[t]||0)*0.6);}
+/* ---------- electricity ---------- */
+var POWER={belt:1,scan:1,gate:1,sep:2,mini:3,dredge:4,seller:5,miner:6,comp:8,craft:8,
+           aqua:10,sup:14,gw:20,ult:30,crab:0,gen:0,lgen:0};
+var BURN=0.0028;            /* fuel units per watt per second */
+var FUEL_OF={mini:0.5,bit:1,large:4,sup:12,ult:25,shell:1.5,pearl:5,anom:2};
+function genOf(I){
+  for(var i=0;i<I.structs.length;i++)if(I.structs[i].t==='gen'||I.structs[i].t==='lgen')return I.structs[i];
+  return null;
+}
+function drawOf(I){
+  var w=0;
+  for(var i=0;i<I.structs.length;i++)w+=(POWER[I.structs[i].t]||0);
+  for(var q=0;q<GW*GH;q++){var c=I.cells[q];if(c&&c.t==='belt')w+=POWER.belt;}
+  return w;
+}
+function freeW(g){return g?(g.t==='lgen'?30:15):0;}
+function billedW(I){var g=genOf(I);return Math.max(0,drawOf(I)-freeW(g));}
+function genCap(g){return g.t==='lgen'?900:400;}
+function feedGen(g,kind,n){
+  var v=(FUEL_OF[kind]||1)*(n||1);
+  g.fuel=Math.min(genCap(g),(g.fuel||0)+v);
+  g.feed=1;
+  return v;
+}
+function isPowered(I){
+  var g=genOf(I);
+  if(!g)return true;                    /* no generator on this island: nothing to pay */
+  return billedW(I)<=0||(g.fuel||0)>0;
+}
 var RECIPES=[['belt',9],['scan',36],['gate',36],['sep',60],['mini',48],['dredge',140],['seller',125],
              ['miner',200],['aqua',440],['comp',290],['craft',380]];
 
@@ -148,6 +177,13 @@ var CATALOG=[
 })();
 function catByKey(k){for(var i=0;i<CATALOG.length;i++)if(CATALOG[i].key===k)return CATALOG[i];return null;}
 /* neighbour NPCs with their own half-built factories and stories */
+var EMPLOYEES=[
+ {name:'Sparky',c1:'#ffd23f',c2:'#ff8a5b'},
+ {name:'Fuse',c1:'#7ce7a2',c2:'#2f7fe0'},
+ {name:'Ampy',c1:'#ff6b9d',c2:'#fff4d6'},
+ {name:'Dynamo',c1:'#c07bff',c2:'#ffd23f'},
+ {name:'Ohm',c1:'#3fc4e8',c2:'#fff4d6'},
+ {name:'Jolt',c1:'#ff8a5b',c2:'#2b2a45'}];
 var LOREPOOL=[
  'They say anomalies are bits that dreamed too hard.',
  'The Mantis Guild once priced one bit at a hundred coins. Chaos.',
@@ -222,7 +258,7 @@ var S={bag:{mini:0,bit:0,large:0,sup:0,anom:0,shell:0,pearl:0,ultra:0,lsup:0,lul
   price:7.5,trend:0,hist:[],mkT:0,ptT:0,newsT:0,news:'',
   pts:0,rew:0,supUnlocked:false,
   tool:'belt',dir:0,isle:0,
-  shop:false,inv:false,parrot:false,land:false,ltab:'own',confirm:null,scfg:null,ccfg:null,linking:null,crabP:null,lore:null,loreN:0,
+  shop:false,inv:false,parrot:false,land:false,ltab:'own',confirm:null,power:false,scfg:null,ccfg:null,linking:null,crabP:null,lore:null,loreN:0,
   amt:'',amtFocus:false,sscroll:0,sscrollMax:0,iscroll:0,iscrollMax:0,lscroll:0,lscrollMax:0,
   renIdx:-1,renTxt:'',
   sold:0,mined:0,tut:0,tutT:0,didPickup:false,sawParrot:false,sawLand:false,pops:[],spark:[],
@@ -244,6 +280,7 @@ function place(t,x,y,dir){
   if(t==='scan'){s.filt='any';s.mode='open';s.gates=[];}
   if(t==='gate'){s.open=true;s.ext=1;s.rdir=1;s.armed=false;s.flash=0;}
   if(t==='sep'){s.k=0;s.spin=0;s.lastOut=-1;s.pulse=0;}
+  if(t==='gen'||t==='lgen'){s.fuel=(t==='lgen'?260:150);s.feed=0;s.spin=0;s.warn=0;}
   if(t==='comp'){s.buf={mini:0,bit:0};s.press=0;}
   if(t==='craft'){s.ri=0;s.prog=0;s.made=0;}
   A.structs.push(s);
@@ -327,6 +364,22 @@ var LORD=(function(){
 })();
 S.hist=[];for(var i=0;i<60;i++)S.hist.push(7.5);
 var M={x:STALL.wx+8*SPR,y:STALL.wy-14*SPR,ph:0,face:-1,blink:0,talk:0};
+/* Volt the axolotl runs the island's generator */
+var VOLT=(function(){
+  var back=A;A=HOME;
+  var g=null;
+  for(var r=0;r<14&&!g;r++){
+    var bx=Math.round(GW/2)+5,by=Math.round(GH/2)+3;
+    for(var yy=by-r;yy<=by+r&&!g;yy++)for(var xx=bx-r;xx<=bx+r;xx++){
+      if(canPlace('gen',xx,yy)){g=place('gen',xx,yy,0);break;}}
+  }
+  A=back;
+  if(!g)return null;
+  var spot={x:g.x,y:g.y+2};
+  if(HOME.cells[spot.y*GW+spot.x])spot={x:g.x+1,y:g.y+2};
+  HOME.cells[spot.y*GW+spot.x]={t:'npc'};
+  return {gen:g,x:spot.x,y:spot.y,wx:cx(spot.x)+TS/2,wy:cy(spot.y)+TS-2};
+})();
 
 /* ---------- tutorial ---------- */
 var TUT=[
@@ -441,7 +494,7 @@ function mineKind(t,big){
 function emit(m,kind){
   var o=outlets(m),belts=[],spots=[];
   for(var i=0;i<o.length;i++){var q=o[i],c=cell(q[0],q[1]);
-    if(c&&c.t==='occ'&&c.s.t==='sep'&&beltFree(q[0],q[1],0.2))belts.push(q);
+    if(c&&c.t==='occ'&&(c.s.t==='sep'||c.s.t==='gen'||c.s.t==='lgen')&&beltFree(q[0],q[1],0.2))belts.push(q);
     else if(c&&c.t==='belt'&&!(DX[c.dir]===-q[2]&&DY[c.dir]===-q[3])&&beltFree(q[0],q[1],0.2))belts.push(q);
     else if(inGrid(q[0],q[1])&&!c)spots.push(q);}
   var n=sizeOf(m.t);
@@ -482,7 +535,7 @@ function acceptsFrom(x,y,d){
     var k=c.s.t;
     if(k==='sep')return true;
     if(k==='gate')return (c.s.armed?c.s.rdir:c.s.dir)!==((d+2)%4);
-    return k==='seller'||k==='comp'||k==='craft'||k==='gw';
+    return k==='seller'||k==='comp'||k==='craft'||k==='gw'||k==='gen'||k==='lgen';
   }
   return false;
 }
@@ -539,7 +592,7 @@ function handOff(it,idx,nx,ny,d){
     if(sellerTake(nc.s,it.kind,nx,ny)){A.items.splice(idx,1);return true;}
     it.p=1;return false;
   }
-  if(nc&&nc.t==='occ'&&(nc.s.t==='comp'||nc.s.t==='craft'||nc.s.t==='gw')){
+  if(nc&&nc.t==='occ'&&(nc.s.t==='comp'||nc.s.t==='craft'||nc.s.t==='gw'||nc.s.t==='gen'||nc.s.t==='lgen')){
     it.cx=nx;it.cy=ny;it.p=1;return true;    /* let the normal machine code eat it next tick */
   }
   it.p=1;return false;
@@ -596,6 +649,13 @@ function updateItems(dt){
           beep(980,0.07,'sine',0.04);
         }
         else emit(nc.s,it.kind);
+      }
+      else if(nc&&nc.t==='occ'&&(nc.s.t==='gen'||nc.s.t==='lgen')){
+        var gg=nc.s;A.items.splice(i,1);
+        var got=feedGen(gg,it.kind,1);
+        pop(cx(nx)+TS/2,cy(ny),'+'+got.toFixed(1)+' fuel','#ffd23f');
+        sparkle(cx(nx)+TS/2,cy(ny)+TS/2,'#ffb347',4);
+        beep(300+got*20,0.06,'square',0.04);
       }
       else if(nc&&nc.t==='occ'&&nc.s.t==='comp'){
         var cs=nc.s;A.items.splice(i,1);
@@ -784,12 +844,21 @@ function buyIsle(cat){
   S.coins-=cat.price;
   var I=genIsle(cat);
   ISLES.push(I);
-  /* every island comes with 2 intercontinental gateways: one placed there, one for your pocket */
+  /* every island comes with 2 gateways, a large generator with an employee, and a concierge */
   var back=A;A=I;
-  var gx=Math.round(GW/2)-1,gy=Math.round(GH/2)-1,placed=false;
-  outer:
-  for(var r=0;r<10&&!placed;r++)for(var yy=gy-r;yy<=gy+r&&!placed;yy++)for(var xx=gx-r;xx<=gx+r;xx++){
-    if(canPlace('gw',xx,yy)){place('gw',xx,yy,0);placed=true;break;}}
+  function drop(kind,cxr,cyr){
+    for(var r=0;r<14;r++)for(var yy=cyr-r;yy<=cyr+r;yy++)for(var xx=cxr-r;xx<=cxr+r;xx++){
+      if(canPlace(kind,xx,yy)){return place(kind,xx,yy,0);}}
+    return null;
+  }
+  drop('gw',Math.round(GW/2)-1,Math.round(GH/2)-1);
+  var lg=drop('lgen',Math.round(GW/2)+6,Math.round(GH/2)-1);
+  if(lg){
+    var emp=EMPLOYEES[ISLES.length%EMPLOYEES.length];
+    I.emp={name:emp.name,c1:emp.c1,c2:emp.c2,x:lg.x,y:lg.y+sizeOf('lgen'),
+      wx:cx(lg.x)+TS*1.5,wy:cy(lg.y)+TS*(sizeOf('lgen')+0.9)};
+  }
+  drop('crab',Math.round(GW/2)-7,Math.round(GH/2)+3);
   A=back;
   S.stock.gw++;
   S.hint=cat.name+' is yours! It has a gateway - place your free one to link it';S.hintT=5;
@@ -1331,6 +1400,100 @@ function drawNpcCritter(n){
   X.beginPath();X.moveTo(-3,by+9);X.lineTo(2,by+15);X.lineTo(4,by+9);X.closePath();fill(COL.cream);
   txt('..',0,by-2,12,'#5a3820','center');
 }
+function drawGenerator(d){
+  var big=d.t==='lgen',n=big?3:2,w=n*TS/SPR;
+  var lit=(d.fuel||0)>0,b=Math.sin(T*1.7+d.x)*1.1;
+  shadow(big?44:30,big?12:9);
+  X.save();X.translate(0,(big?-44:-30)+b);
+  /* housing */
+  rr(-w/2+4,-18,w-8,36,9);fill(big?'#5b6270':'#6d7484');line(COL.dark,3);
+  X.fillStyle='rgba(255,255,255,.14)';rr(-w/2+4,-18,w-8,11,9);X.fill();
+  /* flywheel */
+  X.save();X.translate(-w/6,2);X.rotate(d.spin||0);
+  X.beginPath();X.arc(0,0,big?13:10,0,6.3);fill(lit?'#ffd23f':'#4a5060');line(COL.dark,2.5);
+  X.strokeStyle=COL.dark;X.lineWidth=2;
+  for(var i=0;i<3;i++){X.beginPath();X.moveTo(0,0);X.rotate(2.094);X.lineTo(0,big?11:8);X.stroke();}
+  X.restore();
+  /* fuel window */
+  var cap=big?900:400,fp=clamp((d.fuel||0)/cap,0,1);
+  rr(w/6-11,-12,22,26,4);fill('#221c33');line(COL.dark,2);
+  rr(w/6-9,-10+24*(1-fp),18,24*fp,3);fill(fp>0.3?COL.bit:'#ff6d6d');
+  /* stack + sparks */
+  rr(-w/2+9,-30,10,14,3);fill('#4a5060');line(COL.dark,2.2);
+  if(lit){
+    for(var q=0;q<3;q++){var tq=((T*1.2+q*0.33)%1);
+      X.globalAlpha=0.5*(1-tq);X.fillStyle='#dfe5f2';
+      X.beginPath();X.arc(-w/2+14,-32-tq*22,2+tq*5,0,6.3);X.fill();X.globalAlpha=1;}
+    X.globalAlpha=0.35+0.25*Math.sin(T*6);
+    X.strokeStyle='#ffe9a3';X.lineWidth=2;X.lineCap='round';
+    X.beginPath();X.moveTo(-4,-22);X.lineTo(2,-14);X.lineTo(-2,-14);X.lineTo(4,-6);X.stroke();
+    X.globalAlpha=1;
+  }
+  /* bolt badge */
+  X.strokeStyle=lit?COL.gold:'#6a6590';X.lineWidth=3.5;X.lineCap='round';X.lineJoin='round';
+  X.beginPath();X.moveTo(3,-8);X.lineTo(-3,0);X.lineTo(2,0);X.lineTo(-3,8);X.stroke();
+  X.restore();
+  txt(big?'LARGE GENERATOR':'GENERATOR',0,big?20:16,8,lit?'#ffe9a3':'#ff9d9d','center');
+  if((d.warn||0)>0.9){
+    X.globalAlpha=0.5+0.4*Math.sin(T*8);
+    txt('OUT OF FUEL',0,big?32:28,9,'#ff6d6d','center');X.globalAlpha=1;
+  }
+}
+function drawVolt(){
+  var b=Math.sin(T*2)*1.3;
+  shadow(13,5);
+  X.save();X.translate(0,-13+b);X.scale(1.15,1.15);
+  /* axolotl body */
+  X.beginPath();X.ellipse(0,2,10,9,0,0,6.3);fill('#ff9ecb');line('#c25c8e',2.3);
+  X.beginPath();X.ellipse(-11,4,7,4,0.35,0,6.3);fill('#ff9ecb');line('#c25c8e',2);
+  /* head */
+  X.beginPath();X.arc(2,-9,8,0,6.3);fill('#ffb3d9');line('#c25c8e',2.3);
+  /* frilly gills */
+  X.strokeStyle='#ff6b9d';X.lineWidth=2.4;X.lineCap='round';
+  for(var g=0;g<3;g++){
+    var a=-0.5+g*0.5,sw=Math.sin(T*3+g)*0.12;
+    X.beginPath();X.moveTo(-4,-11);X.quadraticCurveTo(-11,-15+g*3,-14+Math.sin(T*3+g)*1.5,-16+g*4);X.stroke();
+    X.beginPath();X.moveTo(8,-11);X.quadraticCurveTo(15,-15+g*3,18+Math.cos(T*3+g)*1.5,-16+g*4);X.stroke();
+  }
+  X.fillStyle=COL.dark;X.beginPath();X.arc(-1,-10,1.6,0,6.3);X.arc(6,-10,1.6,0,6.3);X.fill();
+  X.strokeStyle='#c25c8e';X.lineWidth=1.5;
+  X.beginPath();X.arc(2.5,-6,2.6,0.2,2.9);X.stroke();
+  /* hard hat */
+  X.fillStyle=COL.gold;
+  X.beginPath();X.arc(2,-15,7.5,3.14,6.28);X.fill();line('#b8891b',2);
+  X.fillStyle='#ffe08a';X.fillRect(-6,-16,17,3);
+  /* spanner */
+  X.strokeStyle='#9aa4b5';X.lineWidth=3;
+  X.beginPath();X.moveTo(9,4);X.lineTo(15,-2);X.stroke();
+  X.beginPath();X.arc(16,-3,2.6,0.6,5.2);X.stroke();
+  X.restore();
+  var by=-50+Math.sin(T*2)*2;
+  rr(-15,by-11,30,21,8);fill(COL.cream);line(COL.dark,2.4);
+  X.beginPath();X.moveTo(-4,by+9);X.lineTo(2,by+16);X.lineTo(4,by+9);X.closePath();fill(COL.cream);
+  X.strokeStyle=COL.gold;X.lineWidth=2.6;X.lineCap='round';X.lineJoin='round';
+  X.beginPath();X.moveTo(3,by-6);X.lineTo(-3,by);X.lineTo(2,by);X.lineTo(-3,by+6);X.stroke();
+}
+function drawEmployee(e){
+  var b=Math.sin(T*2.3)*1.2;
+  shadow(11,4.5);
+  X.save();X.translate(0,-12+b);X.scale(1.05,1.05);
+  X.beginPath();X.ellipse(0,0,8,10,0,0,6.3);fill(e.c1);line(COL.dark,2.2);
+  X.fillStyle=e.c2;X.beginPath();X.ellipse(0,4,5,5.5,0,0,6.3);X.fill();
+  X.beginPath();X.arc(2,-10,6,0,6.3);fill(e.c1);line(COL.dark,2.2);
+  X.fillStyle='#fff';X.beginPath();X.arc(4,-11,2.6,0,6.3);X.fill();line(COL.dark,1.2);
+  X.fillStyle=COL.dark;X.beginPath();X.arc(4.6,-10.8,1.3,0,6.3);X.fill();
+  /* hard hat */
+  X.fillStyle=COL.gold;X.beginPath();X.arc(2,-14,6,3.14,6.28);X.fill();line('#b8891b',1.8);
+  X.fillStyle='#ffe08a';X.fillRect(-4,-15,12,2.4);
+  X.strokeStyle=COL.dark;X.lineWidth=1.8;X.lineCap='round';
+  X.beginPath();X.moveTo(-3,10);X.lineTo(-3,13);X.moveTo(3,10);X.lineTo(3,13);X.stroke();
+  X.restore();
+  var by=-44+Math.sin(T*2.2)*2;
+  rr(-14,by-10,28,20,7);fill(COL.cream);line(COL.dark,2.2);
+  X.beginPath();X.moveTo(-3,by+9);X.lineTo(2,by+15);X.lineTo(4,by+9);X.closePath();fill(COL.cream);
+  X.strokeStyle=COL.gold;X.lineWidth=2.2;X.lineCap='round';X.lineJoin='round';
+  X.beginPath();X.moveTo(2,by-5);X.lineTo(-2,by);X.lineTo(1,by);X.lineTo(-2,by+5);X.stroke();
+}
 function drawStall(){
   shadow(58,11);
   X.save();X.translate(0,-16);
@@ -1530,6 +1693,12 @@ function itemIcon(kind,scale){
   else if(kind==='scan'){rr(-14,-14,28,28,6);fill('#2f4a48');line(COL.dark,2.5);
     X.beginPath();X.arc(0,0,8,0,6.3);fill('#1f3b39');line('#57e6c9',2);
     X.strokeStyle='#57e6c9';X.lineWidth=2;X.beginPath();X.moveTo(0,0);X.lineTo(6,-4);X.stroke();}
+  else if(kind==='gen'||kind==='lgen'){rr(-15,-8,30,22,6);fill('#6d7484');line(COL.dark,2.5);
+    X.beginPath();X.arc(-6,3,6,0,6.3);fill(COL.gold);line(COL.dark,2);
+    rr(4,-3,9,12,3);fill('#221c33');line(COL.dark,1.8);
+    rr(5,0,7,8,2);fill(COL.bit);
+    X.strokeStyle=COL.gold;X.lineWidth=2.6;X.lineCap='round';X.lineJoin='round';
+    X.beginPath();X.moveTo(-2,-14);X.lineTo(-7,-8);X.lineTo(-3,-8);X.lineTo(-8,-2);X.stroke();}
   else if(kind==='sep'){rr(-14,-14,28,28,6);fill('#4b5a53');line(COL.dark,2.5);
     X.strokeStyle='#cfe8d8';X.lineWidth=2.5;X.lineCap='round';
     X.beginPath();X.moveTo(-9,0);X.lineTo(9,0);X.moveTo(0,-9);X.lineTo(0,9);X.stroke();
@@ -1576,7 +1745,7 @@ var ITEMS=[
  {k:'craft',name:'CRAFTER',hot:'',desc:'Eats bits, builds machines. Click it to pick one.'},
  {k:'aqua',name:'AQUA MINER',hot:'',desc:'Water only. Dredges bit, shells and pearls.'},
  {k:'dredge',name:'DREDGER',hot:'',desc:'One square of water. Scoops up seashells.'},
- {k:'crab',name:'CONCIERGE CRAB',hot:'',desc:'All three NPC services - for your OTHER islands.'},
+ {k:'crab',name:'CONCIERGE CRAB',hot:'',desc:'Comes free with every island you buy.'},
  {k:'gw',name:'GATEWAY',hot:'',desc:'Bits teleport between gateways - even between islands.'}];
 function itemName(k){for(var i=0;i<ITEMS.length;i++)if(ITEMS[i].k===k)return ITEMS[i].name;return k;}
 function invTotal(){var n=0;for(var k in S.stock)n+=S.stock[k];return n;}
@@ -1597,6 +1766,14 @@ function drawHud(){
   txt('c',xx+10,22,10,'#b8891b','center');
   txt(S.coins+'',xx+22,22,12,COL.cream);
   txt(S.pts+' pts',xx+80,22,10,'#c9a6ff','left');
+  (function(){
+    var g=genOf(CURI);if(!g)return;
+    var lit=(g.fuel||0)>0,bx=xx+142;
+    X.strokeStyle=lit?COL.gold:'#ff6d6d';X.lineWidth=2.4;X.lineCap='round';X.lineJoin='round';
+    X.beginPath();X.moveTo(bx+4,14);X.lineTo(bx-2,23);X.lineTo(bx+3,23);X.lineTo(bx-3,31);X.stroke();
+    txt(billedW(CURI)+'W',bx+10,17,8,'#8d88b5','left',false);
+    txt((g.fuel||0).toFixed(0),bx+10,29,9,lit?COL.bit2:'#ff6d6d','left');
+  })();
   var up=S.trend>=0;
   txt(KINDNAME[S.cur],598,13,8,'#8d88b5','right');
   txt(priceOf(S.cur).toFixed(2)+'c',598,28,13,up?'#6bf28a':'#ff6b6b','right');
@@ -1714,7 +1891,7 @@ function shopRows(){
   var rows=[['CONVEYOR',25,'belt'],['MINI MINER',150,'mini'],['BITMINER',600,'miner'],
             ['AUTO SELLER',400,'seller'],['SCANNER',120,'scan'],['REDIRECTOR',120,'gate'],
             ['SEPARATOR',200,'sep'],['DREDGER',450,'dredge'],['AQUA MINER',1400,'aqua'],
-            ['COMPRESSOR',900,'comp'],['CRAFTER',1200,'craft'],['CONCIERGE CRAB',1500,'crab']];
+            ['COMPRESSOR',900,'comp'],['CRAFTER',1200,'craft']];
   rows.push(S.supUnlocked?['SUPER MINER',9000,'sup']:['SUPER MINER','???','locked']);
   rows.push(S.gwUnlocked?['GATEWAY',15000,'gw']:['GATEWAY','???','locked']);
   rows.push(S.ultraUnlocked?['ULTRA MINER',30000,'ult']:['ULTRA MINER','???','locked']);
@@ -2087,16 +2264,17 @@ function drawScfg(){
 var crabBtns=[];
 function drawCrabP(){
   var cb=S.crabP;if(!cb)return;
-  var pw=250,ph=176,px=clamp(cx(cb.x)+TS-pw/2,10,W-pw-10),py=cy(cb.y)+TS*2+10;
+  var pw=250,ph=214,px=clamp(cx(cb.x)+TS-pw/2,10,W-pw-10),py=cy(cb.y)+TS*2+10;
   if(py+ph>H-BOT-6)py=cy(cb.y)-ph-14;
   rr(px,py,pw,ph,12);fill('#3d2413');line('#ff6a3d',3);
-  txt('CONCIERGE CRAB',px+14,py+18,12,'#ffb08a');
-  txt('"The boss lets me do everything!"',px+14,py+34,8,'#c9926d','left',false);
+  txt(cb.emp?'ISLAND STAFF':'CONCIERGE CRAB',px+14,py+18,12,'#ffb08a');
+  txt(cb.emp?'"Anything you need, boss."':'"The boss lets me do everything!"',px+14,py+34,8,'#c9926d','left',false);
   crabBtns=[];
   var rows=[['TRADE - the mantis desk',function(){S.crabP=null;S.shop=true;S.sscroll=0;S.amtFocus=true;}],
             ['PRIZES - the parrot desk',function(){S.crabP=null;S.parrot=true;S.sawParrot=true;}],
-            ['ISLANDS - the property desk',function(){S.crabP=null;S.land=true;S.sawLand=true;S.lscroll=0;}]];
-  for(var i=0;i<3;i++){
+            ['ISLANDS - the property desk',function(){S.crabP=null;S.land=true;S.sawLand=true;S.lscroll=0;}],
+            ['POWER - fuel the generator',function(){S.crabP=null;S.power=true;}]];
+  for(var i=0;i<rows.length;i++){
     var ry=py+46+i*38;
     rr(px+14,ry,pw-28,32,8);fill('#5a3820');line('#ff6a3d',2);
     txt(rows[i][0],px+28,ry+16,9,COL.cream);
@@ -2135,6 +2313,60 @@ function drawConfirm(){
   rr(px+160,py+72,124,40,9);fill('#3a3663');line('#8d88b5',2.5);
   txt(q.no,px+222,py+92,11,COL.cream,'center');
   confirmBtns.push({x:px+160,y:py+72,w:124,h:40,f:function(){S.confirm=null;beep(340,0.05,'sine',0.04);}});
+}
+/* ---------- power office ---------- */
+var PWW=420,PWH=330,PWX=(W-PWW)/2,PWY=(H-PWH)/2;
+var powBtns=[];
+function drawPower(){
+  var I=CURI,g=genOf(I);
+  X.fillStyle='rgba(20,17,40,.62)';X.fillRect(0,0,W,H);
+  var px=PWX,py=PWY;
+  rr(px,py,PWW,PWH,16);fill('#2a2748');line(COL.gold,4);
+  X.save();X.beginPath();X.roundRect(px,py,PWW,PWH,16);X.clip();
+  X.fillStyle=COL.gold;X.fillRect(px,py,PWW,42);X.restore();
+  txt(I.home?"VOLT'S POWER OFFICE":((I.emp?I.emp.name:'THE')+"'S POWER SHED"),px+18,py+22,13,'#5c4405');
+  powBtns=[];
+  if(!g){
+    txt('This island has no generator.',px+20,py+80,11,COL.cream);
+    txt('Buy an island and one comes with it.',px+20,py+102,9,'#8d88b5','left',false);
+  } else {
+    var dw=drawOf(I),fw=freeW(g),bw=billedW(I),cap=genCap(g);
+    var burn=bw*BURN, mins=burn>0?((g.fuel||0)/burn/60):Infinity;
+    rr(px+16,py+54,PWW-32,74,10);fill('#211f3c');line('#3a3663',2);
+    txt('DRAWING',px+32,py+72,8,'#8d88b5');
+    txt(dw+'W',px+32,py+94,20,COL.cream);
+    txt(fw+'W free, '+bw+'W billed',px+32,py+114,8,'#8d88b5','left',false);
+    txt('FUEL',px+PWW-150,py+72,8,'#8d88b5');
+    txt((g.fuel||0).toFixed(0)+' / '+cap,px+PWW-150,py+94,17,(g.fuel>40?COL.bit2:'#ff6d6d'));
+    txt(burn>0?(burn.toFixed(2)+'/s  -  '+(mins===Infinity?'forever':(mins<1?'under a minute!':mins.toFixed(0)+' min left'))):'nothing to burn',
+        px+PWW-150,py+114,8,burn>0&&mins<3?'#ff9d9d':'#8d88b5','left',false);
+    var fp=clamp((g.fuel||0)/cap,0,1);
+    rr(px+16,py+134,PWW-32,12,5);fill('#211f3c');
+    if(fp>0){rr(px+16,py+134,(PWW-32)*fp,12,5);fill(fp>0.3?COL.bit:'#ff6d6d');}
+    txt('FEED THE GENERATOR',px+16,py+164,10,COL.cream);
+    txt('belts can feed it too - just run one in',px+PWW-16,py+164,8,'#8d88b5','right',false);
+    var kinds=['mini','bit','large','sup','anom'];
+    for(var i=0;i<kinds.length;i++){
+      var k=kinds[i],have=S.bag[k]||0,bx=px+16+i*(PWW-32)/5,bw2=(PWW-32)/5-6;
+      rr(bx,py+178,bw2,58,8);fill(have>0?'#3a3663':'#2b2848');line(have>0?COL.gold:'#3a3663',2);
+      X.save();X.translate(bx+bw2/2,py+198);drawBit(0,0,0.9,false,k);X.restore();
+      txt('x'+have,bx+bw2/2,py+216,9,have>0?COL.cream:'#6a6590','center');
+      txt('+'+(FUEL_OF[k]||1)+' ea',bx+bw2/2,py+229,8,'#8d88b5','center',false);
+      if(have>0)powBtns.push({x:bx,y:py+178,w:bw2,h:58,f:(function(kk){return function(){
+        var n=Math.min(S.bag[kk],10);
+        if(n<=0)return;
+        S.bag[kk]-=n;var v=feedGen(g,kk,n);
+        S.hint='Fed '+n+' '+KINDNAME[kk].toLowerCase()+' - +'+v.toFixed(0)+' fuel';S.hintT=3;
+        beep(420,0.07,'square',0.05);setTimeout(function(){beep(640,0.08,'square',0.05);},70);save();};})(k)});
+    }
+    txt('feeds up to 10 at a time',px+16,py+252,8,'#6a6590','left',false);
+    txt(I.powered?'Everything is running.':'BROWNOUT - machines are idle until you feed it',
+        px+16,py+282,10,I.powered?'#6bf28a':'#ff6d6d');
+    txt('Every machine draws power. Bigger factory, hungrier generator.',px+16,py+302,8,'#8d88b5','left',false);
+  }
+  rr(px+PWW-38,py+8,26,24,7);fill('#8a6a10');line('#5c4405',2.5);
+  txt('X',px+PWW-25,py+20,12,COL.cream,'center');
+  powBtns.unshift({x:px+PWW-42,y:py+4,w:34,h:32,f:function(){S.power=false;}});
 }
 var ccfgBtns=[];
 function drawCcfg(){
@@ -2250,6 +2482,12 @@ C.addEventListener('mousedown',function(e){
     if(mouse.sx<LDX||mouse.sx>LDX+LDW||mouse.sy<LDY||mouse.sy>LDY+LDH){S.land=false;S.renIdx=-1;}
     return;
   }
+  if(S.power){
+    for(i=0;i<powBtns.length;i++){var bp=powBtns[i];
+      if(mouse.sx>=bp.x&&mouse.sx<=bp.x+bp.w&&mouse.sy>=bp.y&&mouse.sy<=bp.y+bp.h){bp.f();return;}}
+    if(mouse.sx<PWX||mouse.sx>PWX+PWW||mouse.sy<PWY||mouse.sy>PWY+PWH)S.power=false;
+    return;
+  }
   if(S.crabP){
     for(i=0;i<crabBtns.length;i++){var b8=crabBtns[i];
       if(mouse.sx>=b8.x&&mouse.sx<=b8.x+b8.w&&mouse.sy>=b8.y&&mouse.sy<=b8.y+b8.h){b8.f();return;}}
@@ -2296,6 +2534,10 @@ C.addEventListener('mousedown',function(e){
   if(overStall()){S.shop=true;S.sscroll=0;S.amtFocus=true;M.talk=0;beep(520,0.09,'triangle',0.05);return;}
   if(overParrot()){S.parrot=true;S.sawParrot=true;beep(560,0.08,'triangle',0.05);return;}
   if(overLord()){S.land=true;S.sawLand=true;S.lscroll=0;beep(500,0.08,'triangle',0.05);return;}
+  if(CURI.home&&VOLT&&Math.abs(mouse.sx-VOLT.wx)<26&&mouse.sy>VOLT.wy-56&&mouse.sy<VOLT.wy+10){
+    S.power=true;beep(520,0.08,'triangle',0.05);return;}
+  if(CURI.emp&&Math.abs(mouse.sx-CURI.emp.wx)<26&&mouse.sy>CURI.emp.wy-52&&mouse.sy<CURI.emp.wy+10){
+    S.crabP={x:CURI.emp.x,y:CURI.emp.y,emp:true};beep(520,0.08,'triangle',0.05);return;}
   /* npc islander chat */
   if(A.npc&&A.npcSpot&&Math.abs(mouse.sx-A.npcSpot.wx)<26&&mouse.sy>A.npcSpot.wy-56&&mouse.sy<A.npcSpot.wy+10){
     if(S.lore===A.npc)S.loreN=(S.loreN+1)%A.npc.lore.length;
@@ -2308,6 +2550,7 @@ C.addEventListener('mousedown',function(e){
     var st=structAt(mouse.gx,mouse.gy);
     if(st){
       if(st.t==='crab'){S.crabP=st;beep(640,0.06,'triangle',0.05);return;}
+      if(st.t==='gen'||st.t==='lgen'){S.power=true;beep(560,0.06,'triangle',0.05);return;}
       if(st.t==='scan'){S.scfg=st;S.ccfg=null;S.linking=null;beep(700,0.05,'sine',0.04);return;}
       if(st.t==='craft'){S.ccfg=st;S.scfg=null;S.linking=null;beep(700,0.05,'sine',0.04);return;}
       if(st.t==='miner'||st.t==='sup'||st.t==='ult'){
@@ -2388,7 +2631,7 @@ window.addEventListener('keydown',function(e){
   else if(k==='e'||k==='E'){S.shop=!S.shop;S.inv=false;S.parrot=false;S.land=false;S.sscroll=0;S.amtFocus=S.shop;}
   else if(k==='['){gotoIsle((S.isle-1+ISLES.length)%ISLES.length);}
   else if(k===']'){gotoIsle((S.isle+1)%ISLES.length);}
-  else if(k==='Escape'){S.shop=false;S.inv=false;S.parrot=false;S.land=false;S.scfg=null;S.ccfg=null;S.crabP=null;S.lore=null;S.confirm=null;S.linking=null;S.amtFocus=false;}
+  else if(k==='Escape'){S.shop=false;S.inv=false;S.parrot=false;S.land=false;S.power=false;S.scfg=null;S.ccfg=null;S.crabP=null;S.lore=null;S.confirm=null;S.linking=null;S.amtFocus=false;}
   else if(k==='r'||k==='R'){S.dir=(S.dir+1)%4;rotateHover();}
   else if(k.indexOf('Arrow')===0){
     e.preventDefault();
@@ -2409,11 +2652,12 @@ function save(){
         if(s.t==='seller')o.push({dmg:s.dmg,thr:s.thr,brk:s.brk,why:s.why});
         if(s.t==='scan')o.push({filt:s.filt,mode:s.mode,gates:s.gates});
         if(s.t==='gate')o.push({rdir:s.rdir,dir:s.dir});
+        if(s.t==='gen'||s.t==='lgen')o.push({fuel:s.fuel});
         if(s.t==='comp')o.push({buf:s.buf});
         if(s.t==='craft')o.push({ri:s.ri,prog:s.prog});
         if(s.big)o.push({big:true});
         return o;});
-      return {cat:I.cat,name:I.name,b:belts,s:st,p:I.palms.map(function(a){return [a.x,a.y];})};
+      return {cat:I.cat,name:I.name,emp:I.emp||null,b:belts,s:st,p:I.palms.map(function(a){return [a.x,a.y];})};
     });
     localStorage.setItem('bitminer7',JSON.stringify({isles:isles,isle:S.isle,
       bag:S.bag,unl:S.unlocked,cur:S.cur,coins:S.coins,stock:S.stock,price:S.price,hist:S.hist,
@@ -2431,6 +2675,7 @@ function load(){
         I=genIsle(cat);ISLES.push(I);
       }
       if(di.name)I.name=di.name;
+      if(di.emp)I.emp=di.emp;
       /* reset placeable cells (keep stall/npc/deco marks) */
       var back=A;A=I;
       if(idx===0){
@@ -2544,6 +2789,21 @@ function simulate(dt){
   for(var ii=0;ii<ISLES.length;ii++){
     A=ISLES[ii];
     if(!A.owned&&A!==CURI)continue;   /* guest and npc islands only tick while watched */
+    var gN=A.owned?genOf(A):null;
+    if(gN){
+      var bw=billedW(A);
+      if(bw>0){
+        gN.fuel=Math.max(0,(gN.fuel||0)-bw*BURN*dt);
+        gN.warn=(gN.fuel<=0)?1:((gN.fuel<40)?0.5:0);
+      } else gN.warn=0;
+      gN.spin+=dt*(gN.fuel>0?2.4:0.2);
+      gN.feed=Math.max(0,(gN.feed||0)-dt*2);
+    }
+    A.powered=A.owned?isPowered(A):true;
+    if(!A.powered){
+      if(A===CURI&&S.hintT<=0){S.hint='No power! Feed bits to the generator';S.hintT=2;}
+      continue;                        /* the whole island idles until it is fed */
+    }
     for(var i=0;i<A.structs.length;i++){var s=A.structs[i];
       if(s.t==='miner'||s.t==='mini'||s.t==='sup'||s.t==='ult'||s.t==='aqua'||s.t==='dredge'){
         var cad=s.t==='mini'?5.0:(s.t==='sup'?9.0:(s.t==='ult'?12.0:(s.t==='aqua'?7.0:(s.t==='dredge'?8.0:6.5))));
@@ -2620,6 +2880,8 @@ function render(){
     list.push({wy:LORD.wy,wx:LORD.wx,k:'lord'});
   }
   if(CURI.npc&&CURI.npcSpot)list.push({wy:CURI.npcSpot.wy,wx:CURI.npcSpot.wx,k:'npcc'});
+  if(CURI.home&&VOLT)list.push({wy:VOLT.wy,wx:VOLT.wx,k:'volt'});
+  if(CURI.emp)list.push({wy:CURI.emp.wy,wx:CURI.emp.wx,k:'emp',o:CURI.emp});
   for(var pl=0;pl<A.palms.length;pl++)list.push({wy:cy(A.palms[pl].y)+TS-4,wx:cx(A.palms[pl].x)+TS/2,k:'palm',o:A.palms[pl]});
   for(var it3=0;it3<A.items.length;it3++){var it=A.items[it3],bi2=beltInfo(it.cx,it.cy);
     var d2=bi2?bi2.dir:0;
@@ -2638,6 +2900,7 @@ function render(){
     else if(e3.k==='craft')drawCraft(e3.o);
     else if(e3.k==='aqua')drawAqua(e3.o);
     else if(e3.k==='crab')drawCrabStand(e3.o);
+    else if(e3.k==='gen'||e3.k==='lgen')drawGenerator(e3.o);
     else if(e3.k==='dredge')drawDredge(e3.o);
     else if(e3.k==='gw')drawGwRing(e3.o);
     else if(e3.k==='stall')drawStall();
@@ -2645,6 +2908,8 @@ function render(){
     else if(e3.k==='parrot')drawParrot();
     else if(e3.k==='lord')drawLord();
     else if(e3.k==='npcc')drawNpcCritter(CURI.npc);
+    else if(e3.k==='volt')drawVolt();
+    else if(e3.k==='emp')drawEmployee(e3.o);
     else if(e3.k==='palm')drawPalm(e3.o);
     else if(e3.k==='gem'){drawBit(0,0,0.85,true,e3.kind);}
     else if(e3.k==='loose'){shadow(6,2.5);drawBit(0,-8-e3.o.z,0.8,true,e3.o.kind);
@@ -2668,6 +2933,7 @@ function render(){
   if(S.parrot)drawParrotPanel();
   if(S.land)drawLordPanel();
   if(S.shop)drawShop();
+  if(S.power)drawPower();
   if(S.confirm)drawConfirm();
   requestAnimationFrame(render);
 }
