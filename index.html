@@ -1085,7 +1085,10 @@ function drawShop(){
   X.save();X.beginPath();X.rect(px+2,vy,w-4,vh);X.clip();
   var yy=vy-sc;
   function btn(bx,by2,bw,bh,f){
-    if(by2+bh>vy&&by2<vy+vh)shopBtns.push({x:bx,y:by2,w:bw,h:bh,f:f});
+    /* clamp the clickable area to the visible part of the scroll viewport,
+       so half-hidden rows can never steal clicks from the header or the X */
+    var top=Math.max(by2,vy),bot=Math.min(by2+bh,vy+vh);
+    if(bot>top)shopBtns.push({x:bx,y:top,w:bw,h:bot-top,f:f});
   }
   /* currency price box - click to switch currency */
   var up=S.trend>=0,cc=up?'#6bf28a':'#ff6b6b';
@@ -1153,9 +1156,9 @@ function drawShop(){
     var th=vh*vh/(vh+S.sscrollMax),ty=vy+(vh-th)*(sc/S.sscrollMax);
     rr(px+w-8,ty,4,th,2);fill('#5a54a0');
   }
-  rr(px+w-38,py+8,26,24,7);fill('#0f5e4d');line('#07332a',2.5);
-  txt('X',px+w-25,py+20,12,COL.cream,'center');
-  shopBtns.push({x:px+w-38,y:py+8,w:26,h:24,f:function(){S.shop=false;S.amtFocus=false;}});
+  rr(px+w-42,py+7,30,28,8);fill('#0f5e4d');line('#07332a',2.5);
+  txt('X',px+w-27,py+21,13,COL.cream,'center');
+  shopBtns.unshift({x:px+w-46,y:py+3,w:38,h:36,f:function(){S.shop=false;S.amtFocus=false;}});
 }
 
 /* ---------- parrot panel ---------- */
