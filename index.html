@@ -2105,6 +2105,13 @@ C.addEventListener('mousedown',function(e){
   if(e.button!==0)return;
   if(!AC)beep(440,0.01,'sine',0.001);
   var i;
+  if(!LAUNCHED){
+    if(mouse.sx>=launchBtn.x&&mouse.sx<=launchBtn.x+launchBtn.w&&mouse.sy>=launchBtn.y&&mouse.sy<=launchBtn.y+launchBtn.h){
+      openGameWindow();return;}
+    if(playHereBtn.w&&mouse.sx>=playHereBtn.x&&mouse.sx<=playHereBtn.x+playHereBtn.w&&mouse.sy>=playHereBtn.y&&mouse.sy<=playHereBtn.y+playHereBtn.h){
+      startGame();beep(700,0.06,'triangle',0.05);return;}
+    return;
+  }
   if(S.confirm){
     for(i=0;i<confirmBtns.length;i++){var bc=confirmBtns[i];
       if(mouse.sx>=bc.x&&mouse.sx<=bc.x+bc.w&&mouse.sy>=bc.y&&mouse.sy<=bc.y+bc.h){bc.f();return;}}
@@ -2358,9 +2365,69 @@ function load(){
     S.hint='Welcome back!';S.hintT=2;
   }catch(e){}
 }
-load();
-setInterval(save,5000);
-window.addEventListener('beforeunload',save);
+
+
+/* ---------- launcher: this file opens itself in its own window ---------- */
+var IS_WINDOW=(function(){
+  try{
+    if(/[?&]w=1/.test(location.search))return true;
+    if(window.name==='bitminerwindow')return true;
+    if(window.opener&&window.opener!==window)return true;
+    /* already chromeless (Edge/Chrome --app, or an installed PWA) */
+    if(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)return true;
+    if(!window.locationbar||window.locationbar.visible===false)return true;
+  }catch(e){}
+  return false;
+})();
+var LAUNCHED=IS_WINDOW,launchState='ready',launchBtn={x:0,y:0,w:0,h:0},playHereBtn={x:0,y:0,w:0,h:0};
+function openGameWindow(){
+  var w=856,h=652;
+  var left=Math.max(0,(screen.availWidth||1280)-w-16),top=Math.max(0,(screen.availHeight||800)-h-16);
+  var url=location.href.split('#')[0];
+  url+=(url.indexOf('?')>=0?'&':'?')+'w=1';
+  var win=window.open(url,'bitminerwindow',
+    'popup=yes,width='+w+',height='+h+',left='+left+',top='+top+',menubar=no,toolbar=no,location=no,status=no');
+  if(win){launchState='opened';try{win.focus();}catch(e){}}
+  else launchState='blocked';
+}
+function drawLauncher(){
+  X.fillStyle='#151228';X.fillRect(0,0,W,H);
+  /* a calm sea behind the card */
+  X.globalAlpha=0.5;drawSea();X.globalAlpha=1;
+  var cw=460,ch=290,cx0=(W-cw)/2,cy0=(H-ch)/2-10;
+  rr(cx0,cy0,cw,ch,18);fill('#2a2748');line(COL.bit,4);
+  drawBit(cx0+cw/2,cy0+58,2.6,true,'bit');
+  txt('BITMINER',cx0+cw/2,cy0+112,26,COL.bit2,'center');
+  txt('a cosy island factory',cx0+cw/2,cy0+134,10,'#8d88b5','center',false);
+  if(launchState==='opened'){
+    txt('Opened in its own window.',cx0+cw/2,cy0+180,12,'#6bf28a','center');
+    txt('You can close this tab - your game is running there.',cx0+cw/2,cy0+202,9,'#8d88b5','center',false);
+    launchBtn={x:cx0+cw/2-90,y:cy0+224,w:180,h:40};
+    rr(launchBtn.x,launchBtn.y,launchBtn.w,launchBtn.h,10);fill('#3a3663');line('#5a54a0',2.5);
+    txt('OPEN IT AGAIN',cx0+cw/2,cy0+244,10,COL.cream,'center');
+    playHereBtn={x:0,y:0,w:0,h:0};
+  } else {
+    if(launchState==='blocked'){
+      txt('Your browser blocked the pop-up.',cx0+cw/2,cy0+162,10,'#ff9d9d','center');
+      txt('Allow pop-ups for this page, or just play here.',cx0+cw/2,cy0+180,9,'#8d88b5','center',false);
+    } else {
+      txt('Play in its own little window, out of the way',cx0+cw/2,cy0+170,10,'#8d88b5','center',false);
+    }
+    launchBtn={x:cx0+cw/2-110,y:cy0+196,w:220,h:48};
+    var hot=mouse.sx>=launchBtn.x&&mouse.sx<=launchBtn.x+launchBtn.w&&mouse.sy>=launchBtn.y&&mouse.sy<=launchBtn.y+launchBtn.h;
+    rr(launchBtn.x,launchBtn.y,launchBtn.w,launchBtn.h,11);fill(hot?'#4a7a52':'#3d6b45');line('#6bf28a',3);
+    txt('PLAY IN A WINDOW',cx0+cw/2,cy0+220,12,COL.cream,'center');
+    playHereBtn={x:cx0+cw/2-70,y:cy0+252,w:140,h:28};
+    rr(playHereBtn.x,playHereBtn.y,playHereBtn.w,playHereBtn.h,8);fill('#262340');line('#3a3663',2);
+    txt('play in this tab',cx0+cw/2,cy0+266,9,'#8d88b5','center');
+  }
+}
+function startGame(){
+  LAUNCHED=true;
+  load();
+  setInterval(function(){if(LAUNCHED)save();},5000);
+  window.addEventListener('beforeunload',function(){if(LAUNCHED)save();});
+}
 
 /* ---------- main loop ---------- */
 function simulate(dt){
@@ -2407,9 +2474,10 @@ function pump(){
   var guard=0;
   while(acc>=STEP&&guard++<MAX_CATCHUP/STEP){acc-=STEP;simulate(STEP);}
 }
-setInterval(pump,250);
-document.addEventListener('visibilitychange',function(){if(!document.hidden)pump();});
+setInterval(function(){if(LAUNCHED)pump();},250);
+document.addEventListener('visibilitychange',function(){if(LAUNCHED&&!document.hidden)pump();});
 function render(){
+  if(!LAUNCHED){drawLauncher();requestAnimationFrame(render);return;}
   pump();
   /* ---- render active island ---- */
   drawSea();
@@ -2493,6 +2561,7 @@ function render(){
   if(S.confirm)drawConfirm();
   requestAnimationFrame(render);
 }
+if(IS_WINDOW)startGame();
 requestAnimationFrame(render);
 </script>
 </body>
