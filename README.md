@@ -1,6 +1,6 @@
 # BITMINER
 
-A cosy factory game on a tiny island. Mine **bit** (bright blue gem shards), belt it around, dodge anomalies, trade with a mantis, earn prizes from a parrot.
+A cosy factory game across a whole archipelago. Mine **bit** (bright blue gem shards), belt it around, dodge anomalies, trade with a mantis, earn prizes from a parrot - then buy more islands from the crab landlord, dredge the open sea for seashells and pearls, and teleport your haul home through intercontinental gateways.
 
 ## Play
 
