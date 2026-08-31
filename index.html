@@ -46,11 +46,11 @@ var KINDNAME={mini:'MINI BIT',bit:'BIT',large:'LARGE BIT',sup:'SUPER BIT',anom:'
 var CURS=['mini','bit','large','sup','shell','pearl'];
 
 /* ---------- machine catalogue ---------- */
-var SIZES={belt:1,mini:1,scan:1,gate:1,dredge:1,miner:2,seller:2,sup:2,comp:2,craft:2,aqua:2,gw:3};
-var TERRAIN={belt:'both',scan:'both',gate:'both',gw:'both',
+var SIZES={belt:1,mini:1,scan:1,gate:1,dredge:1,miner:2,seller:2,sup:2,comp:2,craft:2,aqua:2,crab:2,gw:3};
+var TERRAIN={belt:'both',scan:'both',gate:'both',gw:'both',crab:'both',
   miner:'land',mini:'land',sup:'land',seller:'land',comp:'land',craft:'land',
   aqua:'water',dredge:'water'};
-var PRICES={belt:14,mini:60,miner:160,seller:110,scan:45,gate:45,comp:220,craft:260,sup:650,gw:950,aqua:260,dredge:90};
+var PRICES={belt:14,mini:60,miner:160,seller:110,scan:45,gate:45,comp:220,craft:260,sup:650,gw:950,aqua:260,dredge:90,crab:320};
 function sizeOf(t){return SIZES[t]||1;}
 function sellback(t){return Math.floor((PRICES[t]||0)*0.6);}
 var RECIPES=[['belt',5],['scan',15],['gate',15],['mini',22],['dredge',30],['seller',40],
@@ -71,7 +71,7 @@ function tilePath(I,grass,r){
 }
 function genIsle(cfg){
   var I={cat:cfg.key,name:cfg.name,type:cfg.type,scale:cfg.scale||1,seed:cfg.seed||0,rich:!!cfg.rich,
-    home:!!cfg.home,cells:[],structs:[],items:[],loose:[],palms:[],LAND:[],SAND:[]};
+    home:!!cfg.home,owned:true,cells:[],structs:[],items:[],loose:[],palms:[],LAND:[],SAND:[]};
   for(var i=0;i<GW*GH;i++){I.cells[i]=null;I.LAND[i]=false;I.SAND[i]=false;}
   if(cfg.type==='land'){
     var sd=cfg.seed||0,iax=IAX0*I.scale,iay=IAY0*I.scale;
@@ -129,7 +129,82 @@ var CATALOG=[
  {key:'shallows',name:'The Shallows',type:'water',scale:0,seed:11,price:550,blurb:'open water for aquatic mining'},
  {key:'coraldeep',name:'Coral Deep',type:'water',scale:0,seed:77,price:1200,rich:true,blurb:'rich waters - extra pearls'}
 ];
+/* a long, auto-named chart of islands for sale */
+(function(){
+  var PRE=['Coral','Breezy','Sunny','Misty','Turtle','Lagoon','Mango','Pebble','Drift','Star',
+           'Moss','Ember','Foggy','Sail','Tide','Palm','Cocoa','Marble','Whisper','Cinnamon',
+           'Barnacle','Lantern','Puffin','Velvet','Ginger','Thistle','Biscuit','Harbour'];
+  var SUF=[' Atoll',' Key',' Cay',' Reef',' Rock',' Haven',' Hollow',' Shoal',' Rise',' Cove',' Bank',' Spit'];
+  for(var i=0;i<28;i++){
+    var h1=hash(i*3+1,911),h2=hash(i*7+2,733),h3=hash(i*11+5,577);
+    var water=h1<0.3,scale=0.55+h2*0.6;
+    var price=water?(400+Math.round(h3*900/25)*25):(Math.round((250+scale*750)/25)*25);
+    var nm=PRE[Math.floor(h2*PRE.length)]+SUF[Math.floor(h3*SUF.length)];
+    CATALOG.push({key:'g'+i,name:nm,type:water?'water':'land',scale:water?0:scale,
+      seed:1000+i*37,price:price,rich:water&&h3>0.6,
+      blurb:water?(h3>0.6?'rich waters - extra pearls':'open water for aquatic mining')
+                 :(scale>0.95?'a sprawling giant':(scale<0.7?'a cosy little outcrop':'roomy, with soft beaches'))});
+  }
+})();
 function catByKey(k){for(var i=0;i<CATALOG.length;i++)if(CATALOG[i].key===k)return CATALOG[i];return null;}
+/* neighbour NPCs with their own half-built factories and stories */
+var LOREPOOL=[
+ 'They say anomalies are bits that dreamed too hard.',
+ 'The Mantis Guild once priced one bit at a hundred coins. Chaos.',
+ 'The parrot? Retired pirate. The prizes are his old treasure.',
+ 'The crab owns every island you can see. And several you cannot.',
+ 'Bit grows back, you know. The islands hum it out of the sea.',
+ 'I am saving for a super miner. Forty more years, by my count.',
+ 'A gateway once dropped a pearl on my head. Best day of my life.',
+ 'Never feed an auto seller anomalies. I learned this twice.',
+ 'My factory? A work in progress. The belts confuse me.',
+ 'The mantis and the crab are cousins. Do not ask how.',
+ 'Coral Deep glows at night. Nobody asks why anymore.',
+ 'One day I will automate everything and just nap.',
+ 'The sea whispers prices if you listen. Usually about seven.',
+ 'I traded my boat for a compressor. No regrets. Some regrets.'];
+var NPCS=[
+ {name:'Barnaby the Gull',c1:'#e8ecf2',c2:'#f7b32b',seed:301},
+ {name:'Tilly the Turtle',c1:'#5fbf77',c2:'#c98b4b',seed:317},
+ {name:'Momo the Otter',c1:'#a5764e',c2:'#e8cfa8',seed:331},
+ {name:'Ferdinand the Frog',c1:'#69c94f',c2:'#fff4d6',seed:347},
+ {name:'Pip the Sandpiper',c1:'#d9c6a5',c2:'#6d6790',seed:359},
+ {name:'Greta the Goose',c1:'#f2f2f2',c2:'#ff8a5b',seed:373},
+ {name:'Salty the Seal',c1:'#9aa4b5',c2:'#e8ecf2',seed:389},
+ {name:'Inka the Ibis',c1:'#ff6b9d',c2:'#2b2a45',seed:401}];
+NPCS.forEach(function(n,i){
+  n.lore=[];
+  for(var k=0;k<3;k++)n.lore.push(LOREPOOL[Math.floor(hash(n.seed,k*13+7)*LOREPOOL.length)]);
+  n.isle={key:'npc'+i,name:n.name.split(' ')[0]+"'s Island",type:'land',
+    scale:0.6+hash(n.seed,3)*0.45,seed:n.seed};
+});
+function genNpcIsle(n){
+  var I=genIsle(n.isle);
+  I.npc=n;I.owned=false;
+  /* their half-built factory, seeded */
+  var back=A;A=I;
+  var tries=0,want=[['mini',1],['miner',2],['seller',2],['mini',1]];
+  for(var w=0;w<want.length;w++){
+    var t=want[w][0];
+    for(tries=0;tries<160;tries++){
+      var x=2+Math.floor(hash(n.seed+w,tries)*(GW-6)),y=2+Math.floor(hash(tries,n.seed-w)*(GH-4));
+      if(canPlace(t,x,y)){place(t,x,y,0);break;}
+    }
+  }
+  /* a few belts near the first machine */
+  var m=I.structs.filter(function(o){return o.t!=='gw';})[0];
+  if(m){
+    var bx=m.x+sizeOf(m.t),by=m.y;
+    for(var b=0;b<5;b++){
+      if(canPlace('belt',bx+b,by))place('belt',bx+b,by,0);else break;}
+  }
+  /* the npc stands on their beach */
+  var spot=findRegionSpot(I,1,1,ICX,ICY+IAY0*0.4,true)||{x:Math.round(GW/2),y:Math.round(GH/2)};
+  I.cells[spot.y*GW+spot.x]={t:'npc'};
+  I.npcSpot={x:spot.x,y:spot.y,wx:cx(spot.x)+TS/2,wy:cy(spot.y)+TS-2};
+  A=back;
+  return I;
+}
 function isOwned(key){return ISLES.some(function(I){return I.cat===key;});}
 
 /* ---------- active-island context ---------- */
@@ -147,7 +222,7 @@ var S={bag:{mini:0,bit:0,large:0,sup:0,anom:0,shell:0,pearl:0},
   price:7.5,trend:0,hist:[],mkT:0,ptT:0,newsT:0,news:'',
   pts:0,rew:0,supUnlocked:false,
   tool:'belt',dir:0,isle:0,
-  shop:false,inv:false,parrot:false,land:false,scfg:null,ccfg:null,linking:null,
+  shop:false,inv:false,parrot:false,land:false,ltab:'own',scfg:null,ccfg:null,linking:null,crabP:null,lore:null,loreN:0,
   amt:'',amtFocus:false,sscroll:0,sscrollMax:0,iscroll:0,iscrollMax:0,lscroll:0,lscrollMax:0,
   renIdx:-1,renTxt:'',
   sold:0,mined:0,tut:0,tutT:0,pops:[],spark:[],
@@ -379,6 +454,7 @@ function sellerTake(se,kind,nx,ny){
 function allGateways(){
   var out=[];
   for(var i=0;i<ISLES.length;i++){var I=ISLES[i];
+    if(!I.owned)continue;
     for(var j=0;j<I.structs.length;j++)if(I.structs[j].t==='gw')out.push({s:I.structs[j],isle:I});}
   return out;
 }
@@ -496,7 +572,7 @@ function market(dt){
   if(S.newsT>0)S.newsT-=dt;
   S.ptT+=dt;
   if(S.ptT>12){S.ptT=0;
-    var n2=0;ISLES.forEach(function(I){n2+=I.structs.length;});
+    var n2=0;ISLES.forEach(function(I){if(I.owned)n2+=I.structs.length;});
     S.pts+=n2;}
 }
 function sell(n){
@@ -531,6 +607,57 @@ var REW=[
   {p:1500,label:'+400 coins',f:function(){S.coins+=400;}},
   {p:2600,label:'GATEWAY tech for sale at the stall',f:function(){S.gwUnlocked=true;}}
 ];
+
+/* ---------- share codes: islands + gifts (works over any chat app) ---------- */
+function encodeCode(obj){return btoa(unescape(encodeURIComponent(JSON.stringify(obj)))).replace(/=+$/,'');}
+function decodeCode(str){try{return JSON.parse(decodeURIComponent(escape(atob(str.trim()))));}catch(e){return null;}}
+function isleCode(I){
+  var belts=[];
+  for(var y=0;y<GH;y++)for(var x=0;x<GW;x++){var c=I.cells[y*GW+x];
+    if(c&&c.t==='belt')belts.push([x,y,c.dir]);}
+  return encodeCode({t:'isle',n:I.name,c:I.cat,b:belts,
+    s:I.structs.map(function(o){return [o.t,o.x,o.y,o.dir];}),
+    p:I.palms.map(function(a){return [a.x,a.y];})});
+}
+function dropTempIsles(){
+  for(var i=ISLES.length-1;i>=1;i--)if(!ISLES[i].owned)ISLES.splice(i,1);
+  if(S.isle>=ISLES.length)gotoIsle(0);
+}
+function visitCode(code){
+  var d=decodeCode(code);
+  if(!d||d.t!=='isle'){S.hint='That is not an island code';S.hintT=3;beep(160,0.1,'sawtooth',0.04);return;}
+  var cat=catByKey(d.c)||{key:'home',name:'Friend Island',type:'land',scale:1,seed:0};
+  var I=genIsle(cat);I.owned=false;I.guest=true;I.name=(d.n||'Friend')+' (visiting)';
+  var back=A;A=I;
+  for(var q=0;q<GW*GH;q++){var cq=I.cells[q];if(cq&&(cq.t==='belt'||cq.t==='occ'))I.cells[q]=null;}
+  I.structs=[];
+  if(d.p){var keep={};d.p.forEach(function(a){keep[a[0]+','+a[1]]=1;});
+    for(var pi=I.palms.length-1;pi>=0;pi--){var pp=I.palms[pi];
+      if(!keep[pp.x+','+pp.y]){I.cells[pp.y*GW+pp.x]=null;I.palms.splice(pi,1);}}}
+  (d.s||[]).forEach(function(a){if(canPlace(a[0],a[1],a[2]))place(a[0],a[1],a[2],a[3]||0);});
+  (d.b||[]).forEach(function(a){if(inGrid(a[0],a[1])&&!I.cells[a[1]*GW+a[0]])I.cells[a[1]*GW+a[0]]={t:'belt',dir:a[2]};});
+  A=back;
+  dropTempIsles();ISLES.push(I);gotoIsle(ISLES.length-1);
+  S.land=false;S.hint='Visiting '+(d.n||'a friend')+"'s island - look, don't touch!";S.hintT=4;
+  beep(760,0.08,'triangle',0.05);
+}
+function giftCode(kind,amt){
+  return encodeCode({t:'gift',k:kind,a:amt,id:Math.random().toString(36).slice(2,10)});
+}
+function redeemGift(code){
+  var d=decodeCode(code);
+  if(!d||d.t!=='gift'){S.hint='That is not a gift code';S.hintT=3;beep(160,0.1,'sawtooth',0.04);return;}
+  var used={};try{used=JSON.parse(localStorage.getItem('bm_gifts')||'{}');}catch(e){}
+  if(d.id&&used[d.id]){S.hint='That gift was already opened';S.hintT=3;return;}
+  if(d.k==='coins')S.coins+=Math.max(0,Math.min(5000,d.a|0));
+  else if(S.bag[d.k]!==undefined)gain(d.k,Math.max(0,Math.min(999,d.a|0)));
+  else return;
+  if(d.id){used[d.id]=1;try{localStorage.setItem('bm_gifts',JSON.stringify(used));}catch(e){}}
+  var what=d.k==='coins'?(d.a+' coins'):(d.a+' '+KINDNAME[d.k].toLowerCase());
+  S.hint='A gift! You received '+what;S.hintT=4;
+  pop(W/2,H/2,'+'+what,COL.gold);
+  beep(700,0.07,'triangle',0.06);setTimeout(function(){beep(1050,0.09,'triangle',0.06);},90);save();
+}
 
 /* ---------- islands: buy / switch ---------- */
 function gotoIsle(i){
@@ -976,6 +1103,63 @@ function drawGwRing(g){
     X.fillStyle='#6d7484';X.beginPath();X.arc(Math.cos(ba)*29,Math.sin(ba)*29,2.6,0,6.3);X.fill();}
   X.restore();
 }
+function drawCrabStand(d){
+  var b=Math.sin(T*2+d.x)*1.2;
+  shadow(28,8);
+  X.save();X.translate(0,-16+b);
+  /* mini stand */
+  X.fillStyle=COL.wood2;rr(-24,-30,5,32,2);X.fill();line(COL.dark,2);
+  rr(19,-30,5,32,2);X.fill();line(COL.dark,2);
+  rr(-27,0,54,14,5);fill(COL.wood);line(COL.dark,2.5);
+  X.save();X.translate(0,-30);
+  rr(-30,-8,60,11,5);fill(COL.cream);line(COL.dark,2.5);
+  for(var sq=0;sq<4;sq++){
+    var x0=-30+sq*15;
+    X.beginPath();X.moveTo(x0,3);X.lineTo(x0+15,3);
+    X.quadraticCurveTo(x0+15,10,x0+7.5,11);X.quadraticCurveTo(x0,10,x0,3);X.closePath();
+    fill(sq%2?'#ff6a3d':COL.cream);line(COL.dark,2);
+  }
+  X.restore();
+  /* the little worker crab behind the counter */
+  X.save();X.translate(0,-8);X.scale(0.85,0.85);
+  X.beginPath();X.ellipse(0,0,10,7,0,0,6.3);fill('#ff6a3d');line('#a33314',2.2);
+  X.save();X.translate(-11,-2);X.rotate(-0.4+Math.sin(T*2.4)*0.12);
+  X.beginPath();X.arc(0,0,4,0.6,5.6);fill('#ff6a3d');line('#a33314',1.8);X.restore();
+  X.save();X.translate(11,-2);X.rotate(0.4-Math.sin(T*2.4)*0.12);
+  X.beginPath();X.arc(0,0,4,3.7,2.6);fill('#ff6a3d');line('#a33314',1.8);X.restore();
+  X.strokeStyle='#a33314';X.lineWidth=1.6;
+  X.beginPath();X.moveTo(-3,-6);X.lineTo(-4,-11);X.moveTo(3,-6);X.lineTo(4,-11);X.stroke();
+  X.fillStyle='#fff';X.beginPath();X.arc(-4,-12,2.4,0,6.3);X.arc(4,-12,2.4,0,6.3);X.fill();
+  X.strokeStyle='#a33314';X.lineWidth=1.1;
+  X.beginPath();X.arc(-4,-12,2.4,0,6.3);X.stroke();X.beginPath();X.arc(4,-12,2.4,0,6.3);X.stroke();
+  X.fillStyle=COL.dark;X.beginPath();X.arc(-3.5,-12,1.1,0,6.3);X.arc(4.5,-12,1.1,0,6.3);X.fill();
+  /* tiny bow tie */
+  X.fillStyle='#2f7fe0';
+  X.beginPath();X.moveTo(-1,3);X.lineTo(-5,1);X.lineTo(-5,5);X.closePath();X.fill();
+  X.beginPath();X.moveTo(1,3);X.lineTo(5,1);X.lineTo(5,5);X.closePath();X.fill();
+  X.restore();
+  X.restore();
+  txt('CONCIERGE',0,16,8,'#ffcdb4','center');
+}
+function drawNpcCritter(n){
+  var b=Math.sin(T*2.1)*1.4;
+  shadow(12,4.5);
+  X.save();X.translate(0,-13+b);X.scale(1.15,1.15);
+  X.beginPath();X.ellipse(0,0,9,11,0,0,6.3);fill(n.c1);line(COL.dark,2.2);
+  X.fillStyle=n.c2;X.beginPath();X.ellipse(0,4,5.5,6,0,0,6.3);X.fill();
+  X.beginPath();X.arc(3,-11,6.5,0,6.3);fill(n.c1);line(COL.dark,2.2);
+  X.fillStyle='#fff';X.beginPath();X.arc(5,-12,2.8,0,6.3);X.fill();line(COL.dark,1.3);
+  X.fillStyle=COL.dark;X.beginPath();X.arc(5.6,-11.8,1.4,0,6.3);X.fill();
+  X.beginPath();X.moveTo(8,-11);X.quadraticCurveTo(13,-10,10,-7);X.quadraticCurveTo(8,-8,8,-9);X.closePath();
+  fill(n.c2);line(COL.dark,1.6);
+  X.strokeStyle=COL.dark;X.lineWidth=2;X.lineCap='round';
+  X.beginPath();X.moveTo(-3,10);X.lineTo(-3,13);X.moveTo(3,10);X.lineTo(3,13);X.stroke();
+  X.restore();
+  var by=-46+Math.sin(T*2)*2;
+  rr(-14,by-10,28,20,7);fill(COL.cream);line(COL.dark,2.2);
+  X.beginPath();X.moveTo(-3,by+9);X.lineTo(2,by+15);X.lineTo(4,by+9);X.closePath();fill(COL.cream);
+  txt('..',0,by-2,12,'#5a3820','center');
+}
 function drawStall(){
   shadow(58,11);
   X.save();X.translate(0,-16);
@@ -1181,6 +1365,10 @@ function itemIcon(kind,scale){
   else if(kind==='craft'){rr(-16,-4,32,20,6);fill('#3fa8c9');line(COL.dark,3);
     rr(-18,-14,36,10,4);fill(COL.cream);line(COL.dark,2.5);
     X.beginPath();X.arc(0,6,6,0,6.3);fill('#2b7d99');line(COL.dark,2);}
+  else if(kind==='crab'){rr(-16,0,32,14,4);fill(COL.wood);line(COL.dark,2.5);
+    rr(-18,-8,36,8,3);fill(COL.pink);line(COL.dark,2);
+    X.beginPath();X.ellipse(0,-2,7,5,0,0,6.3);fill('#ff6a3d');line('#a33314',2);
+    X.fillStyle='#fff';X.beginPath();X.arc(-2,-8,2,0,6.3);X.arc(3,-8,2,0,6.3);X.fill();}
   else if(kind==='gw'){rr(-16,-16,32,32,8);fill('#7d8698');line(COL.dark,2.5);
     X.fillStyle=COL.bit;X.beginPath();X.arc(0,0,8,0,6.3);X.fill();
     X.strokeStyle='#c9d2df';X.lineWidth=3;X.beginPath();X.arc(0,0,10.5,0,6.3);X.stroke();
@@ -1206,6 +1394,7 @@ var ITEMS=[
  {k:'craft',name:'CRAFTER',hot:'',desc:'Eats bits, builds machines. Click it to pick one.'},
  {k:'aqua',name:'AQUA MINER',hot:'',desc:'Water only. Dredges bit, shells and pearls.'},
  {k:'dredge',name:'DREDGER',hot:'',desc:'One square of water. Scoops up seashells.'},
+ {k:'crab',name:'CONCIERGE CRAB',hot:'',desc:'A worker crab: trade, prizes and property anywhere.'},
  {k:'gw',name:'GATEWAY',hot:'',desc:'Bits teleport between gateways - even between islands.'}];
 function itemName(k){for(var i=0;i<ITEMS.length;i++)if(ITEMS[i].k===k)return ITEMS[i].name;return k;}
 function invTotal(){var n=0;for(var k in S.stock)n+=S.stock[k];return n;}
@@ -1277,6 +1466,10 @@ function drawIsleUI(){
   txt('>',isleUI.r.x+10,isleUI.r.y+11,12,many?COL.bit2:'#4a4668','center');
   txt(CURI.name,91,OY+15,9,COL.cream,'center');
   txt((S.isle+1)+'/'+ISLES.length,91,OY+25,7,'#6a6590','center',false);
+  if(!CURI.owned){
+    rr(180,OY+4,62,26,8);fill('#5a2330');line('#ff6b6b',2);
+    txt('leave',211,OY+17,9,'#ffb3b3','center');
+  }
 }
 
 /* ---------- inventory panel (scrollable, with sell-back) ---------- */
@@ -1339,7 +1532,7 @@ function shopRows(){
   var rows=[['CONVEYOR',14,'belt'],['MINI MINER',60,'mini'],['BITMINER',160,'miner'],
             ['AUTO SELLER',110,'seller'],['SCANNER',45,'scan'],['GATE',45,'gate'],
             ['DREDGER',90,'dredge'],['AQUA MINER',260,'aqua'],
-            ['COMPRESSOR',220,'comp'],['CRAFTER',260,'craft']];
+            ['COMPRESSOR',220,'comp'],['CRAFTER',260,'craft'],['CONCIERGE CRAB',320,'crab']];
   rows.push(S.supUnlocked?['SUPER MINER',650,'sup']:['SUPER MINER','???','locked']);
   rows.push(S.gwUnlocked?['GATEWAY',950,'gw']:['GATEWAY','???','locked']);
   return rows;
@@ -1484,7 +1677,7 @@ function drawParrotPanel(){
 }
 
 /* ---------- landlord panel ---------- */
-var LDW=460,LDH=470,LDX=(W-LDW)/2,LDY=(H-LDH)/2;
+var LDW=470,LDH=480,LDX=(W-LDW)/2,LDY=(H-LDH)/2;
 var lordBtns=[];
 function drawLordPanel(){
   X.fillStyle='rgba(20,17,40,.62)';X.fillRect(0,0,W,H);
@@ -1494,63 +1687,134 @@ function drawLordPanel(){
   X.fillStyle='#ff6a3d';X.fillRect(px,py,LDW,42);X.restore();
   txt("THE CRAB'S PROPERTY OFFICE",px+18,py+22,13,'#5c1c05');
   lordBtns=[];
-  var vy=py+46,vh=LDH-60;
+  /* tabs */
+  var tabs=[['own','YOURS'],['sale','FOR SALE'],['nbr','NEIGHBOURS'],['fr','FRIENDS']];
+  for(var t=0;t<4;t++){
+    var tx=px+14+t*110,sel=S.ltab===tabs[t][0];
+    rr(tx,py+48,102,24,7);fill(sel?'#5a3820':'#242140');line(sel?'#ff6a3d':'#3a3663',sel?2.5:2);
+    txt(tabs[t][1],tx+51,py+60,9,sel?COL.cream:'#8d88b5','center');
+    lordBtns.push({x:tx,y:py+48,w:102,h:24,f:(function(k){return function(){
+      S.ltab=k;S.lscroll=0;S.renIdx=-1;beep(600,0.04,'sine',0.03);};})(tabs[t][0])});
+  }
+  var vy=py+78,vh=LDH-92;
   X.save();X.beginPath();X.rect(px+2,vy,LDW-4,vh);X.clip();
   function btn(bx,by2,bw,bh,f){
     var top=Math.max(by2,vy),bot=Math.min(by2+bh,vy+vh);
     if(bot>top)lordBtns.push({x:bx,y:top,w:bw,h:bot-top,f:f});
   }
   var yy=vy-S.lscroll;
-  txt('YOUR ISLANDS',px+16,yy+8,10,COL.cream);yy+=18;
-  for(var i=0;i<ISLES.length;i++){
-    var I=ISLES[i],cur=i===S.isle,ren=S.renIdx===i;
-    rr(px+16,yy,LDW-32,44,9);fill(cur?'#3a3663':'#242140');line(cur?COL.bit:'#3a3663',cur?2.5:2);
-    var nm=ren?(S.renTxt+((Math.floor(T*2)%2===0)?'|':'')):I.name;
-    txt(nm,px+30,yy+15,11,ren?COL.gold:COL.cream);
-    var mach=I.structs.length,landN=0;
-    for(var q2=0;q2<GW*GH;q2++)if(I.LAND[q2])landN++;
-    txt((I.type==='water'?'open water':(landN+' squares of land'))+'  -  '+mach+' machine'+(mach===1?'':'s')+(I.rich?'  -  rich waters':''),
-        px+30,yy+31,8,'#8d88b5','left',false);
-    if(!ren){
-      rr(px+LDW-160,yy+9,58,26,7);fill('#3d3352');line('#8d88b5',2);
-      txt('rename',px+LDW-131,yy+22,9,'#c9c4e8','center');
-      btn(px+LDW-160,yy+9,58,26,(function(idx,name){return function(){
-        S.renIdx=idx;S.renTxt=name;beep(640,0.04,'sine',0.04);};})(i,I.name));
-      rr(px+LDW-94,yy+9,58,26,7);fill(cur?'#2f2c4e':'#3d6b45');line(cur?'#3a3663':'#6bf28a',2);
-      txt(cur?'here':'VISIT',px+LDW-65,yy+22,9,cur?'#6a6590':COL.cream,'center');
-      if(!cur)btn(px+LDW-94,yy+9,58,26,(function(idx){return function(){
-        gotoIsle(idx);S.land=false;beep(760,0.07,'triangle',0.05);};})(i));
-    } else {
-      txt('type a name, Enter to save',px+LDW-36,yy+22,8,COL.gold,'right',false);
+  if(S.ltab==='own'){
+    for(var i=0;i<ISLES.length;i++){
+      var I=ISLES[i];if(!I.owned)continue;
+      var cur=i===S.isle,ren=S.renIdx===i;
+      rr(px+16,yy,LDW-32,44,9);fill(cur?'#3a3663':'#242140');line(cur?COL.bit:'#3a3663',cur?2.5:2);
+      var nm=ren?(S.renTxt+((Math.floor(T*2)%2===0)?'|':'')):I.name;
+      txt(nm,px+30,yy+15,11,ren?COL.gold:COL.cream);
+      var mach=I.structs.length,landN=0;
+      for(var q2=0;q2<GW*GH;q2++)if(I.LAND[q2])landN++;
+      txt((I.type==='water'?'open water':(landN+' land squares'))+'  -  '+mach+' machine'+(mach===1?'':'s')+(I.rich?'  -  rich':''),
+          px+30,yy+31,8,'#8d88b5','left',false);
+      if(!ren){
+        rr(px+LDW-216,yy+9,56,26,7);fill('#3d3352');line('#8d88b5',2);
+        txt('share',px+LDW-188,yy+22,9,'#c9c4e8','center');
+        btn(px+LDW-216,yy+9,56,26,(function(isle){return function(){
+          var code=isleCode(isle);
+          window.prompt('Send this code to a friend so they can visit "'+isle.name+'":',code);
+        };})(I));
+        rr(px+LDW-152,yy+9,60,26,7);fill('#3d3352');line('#8d88b5',2);
+        txt('rename',px+LDW-122,yy+22,9,'#c9c4e8','center');
+        btn(px+LDW-152,yy+9,60,26,(function(idx,name){return function(){
+          S.renIdx=idx;S.renTxt=name;beep(640,0.04,'sine',0.04);};})(i,I.name));
+        rr(px+LDW-84,yy+9,56,26,7);fill(cur?'#2f2c4e':'#3d6b45');line(cur?'#3a3663':'#6bf28a',2);
+        txt(cur?'here':'VISIT',px+LDW-56,yy+22,9,cur?'#6a6590':COL.cream,'center');
+        if(!cur)btn(px+LDW-84,yy+9,56,26,(function(idx){return function(){
+          gotoIsle(idx);S.land=false;beep(760,0.07,'triangle',0.05);};})(i));
+      } else {
+        txt('type a name, Enter to save',px+LDW-36,yy+22,8,COL.gold,'right',false);
+      }
+      yy+=50;
     }
-    yy+=50;
   }
-  yy+=8;
-  txt('FOR SALE',px+16,yy+8,10,COL.cream);yy+=18;
-  var anyForSale=false;
-  for(var c2=0;c2<CATALOG.length;c2++){
-    var cat=CATALOG[c2];
-    if(isOwned(cat.key))continue;
-    anyForSale=true;
-    var afford=S.coins>=cat.price;
-    rr(px+16,yy,LDW-32,44,9);fill(afford?'#3a3663':'#2b2848');line(afford?COL.gold:'#3a3663',2.5);
-    /* tiny map icon */
-    X.save();X.translate(px+34,yy+22);
-    if(cat.type==='water'){X.fillStyle='#3fc4e8';X.beginPath();X.arc(0,0,11,0,6.3);X.fill();line('#12557a',2);
-      X.strokeStyle='#bdf1ff';X.lineWidth=1.5;X.beginPath();X.moveTo(-6,1);X.quadraticCurveTo(-3,-2,0,1);X.quadraticCurveTo(3,4,6,1);X.stroke();}
-    else{X.fillStyle='#3fc4e8';X.beginPath();X.arc(0,0,11,0,6.3);X.fill();line('#12557a',2);
-      X.fillStyle=COL.grass;X.beginPath();X.ellipse(0,0,4+cat.scale*4.5,3+cat.scale*3.5,0.3,0,6.3);X.fill();
-      X.strokeStyle=COL.sand2;X.lineWidth=1.5;X.stroke();}
-    X.restore();
-    txt(cat.name,px+54,yy+15,11,afford?COL.cream:'#6a6590');
-    txt(cat.blurb+'  -  comes with 2 gateways',px+54,yy+31,8,'#8d88b5','left',false);
-    txt(cat.price+'c',px+LDW-96,yy+22,12,afford?COL.gold:'#6a6590','right');
-    rr(px+LDW-84,yy+9,48,26,7);fill(afford?'#3d6b45':'#2f2c4e');line(afford?'#6bf28a':'#3a3663',2);
-    txt('BUY',px+LDW-60,yy+22,10,afford?COL.cream:'#6a6590','center');
-    if(afford)btn(px+LDW-84,yy+9,48,26,(function(ct){return function(){buyIsle(ct);};})(cat));
-    yy+=50;
+  else if(S.ltab==='sale'){
+    txt('the crab charts '+CATALOG.filter(function(c){return !isOwned(c.key);}).length+' unsold islands',px+18,yy+8,8,'#8d88b5','left',false);
+    yy+=18;
+    for(var c2=0;c2<CATALOG.length;c2++){
+      var cat=CATALOG[c2];
+      if(isOwned(cat.key))continue;
+      var afford=S.coins>=cat.price;
+      rr(px+16,yy,LDW-32,44,9);fill(afford?'#3a3663':'#2b2848');line(afford?COL.gold:'#3a3663',2.5);
+      X.save();X.translate(px+34,yy+22);
+      if(cat.type==='water'){X.fillStyle='#3fc4e8';X.beginPath();X.arc(0,0,11,0,6.3);X.fill();line('#12557a',2);
+        X.strokeStyle='#bdf1ff';X.lineWidth=1.5;X.beginPath();X.moveTo(-6,1);X.quadraticCurveTo(-3,-2,0,1);X.quadraticCurveTo(3,4,6,1);X.stroke();}
+      else{X.fillStyle='#3fc4e8';X.beginPath();X.arc(0,0,11,0,6.3);X.fill();line('#12557a',2);
+        X.fillStyle=COL.grass;X.beginPath();X.ellipse(0,0,4+cat.scale*4.5,3+cat.scale*3.5,0.3,0,6.3);X.fill();
+        X.strokeStyle=COL.sand2;X.lineWidth=1.5;X.stroke();}
+      X.restore();
+      txt(cat.name,px+54,yy+15,11,afford?COL.cream:'#6a6590');
+      txt(cat.blurb+'  -  2 gateways included',px+54,yy+31,8,'#8d88b5','left',false);
+      txt(cat.price+'c',px+LDW-96,yy+22,12,afford?COL.gold:'#6a6590','right');
+      rr(px+LDW-84,yy+9,48,26,7);fill(afford?'#3d6b45':'#2f2c4e');line(afford?'#6bf28a':'#3a3663',2);
+      txt('BUY',px+LDW-60,yy+22,10,afford?COL.cream:'#6a6590','center');
+      if(afford)btn(px+LDW-84,yy+9,48,26,(function(ct){return function(){buyIsle(ct);};})(cat));
+      yy+=50;
+    }
   }
-  if(!anyForSale){txt('nothing left to sell - you own the whole chart!',px+20,yy+12,9,'#8d88b5','left',false);yy+=28;}
+  else if(S.ltab==='nbr'){
+    txt('the crab can sail you out to the neighbours',px+18,yy+8,8,'#8d88b5','left',false);
+    yy+=18;
+    for(var n2=0;n2<NPCS.length;n2++){
+      var np=NPCS[n2];
+      rr(px+16,yy,LDW-32,44,9);fill('#242140');line('#3a3663',2);
+      X.save();X.translate(px+34,yy+22);X.scale(0.55,0.55);
+      X.beginPath();X.ellipse(0,2,9,11,0,0,6.3);fill(np.c1);line(COL.dark,2.4);
+      X.fillStyle=np.c2;X.beginPath();X.ellipse(0,6,5.5,6,0,0,6.3);X.fill();
+      X.beginPath();X.arc(3,-9,6.5,0,6.3);fill(np.c1);line(COL.dark,2.4);
+      X.fillStyle=COL.dark;X.beginPath();X.arc(5,-9,1.5,0,6.3);X.fill();
+      X.restore();
+      txt(np.name,px+54,yy+15,11,COL.cream);
+      txt(np.isle.name+'  -  a factory in progress',px+54,yy+31,8,'#8d88b5','left',false);
+      rr(px+LDW-84,yy+9,56,26,7);fill('#3d6b45');line('#6bf28a',2);
+      txt('SAIL',px+LDW-56,yy+22,9,COL.cream,'center');
+      btn(px+LDW-84,yy+9,56,26,(function(nn){return function(){
+        dropTempIsles();
+        var I=genNpcIsle(nn);ISLES.push(I);gotoIsle(ISLES.length-1);
+        S.land=false;S.hint='Visiting '+nn.name+' - click them for a chat';S.hintT=4;
+        beep(760,0.08,'triangle',0.05);};})(np));
+      yy+=50;
+    }
+  }
+  else { /* friends */
+    txt('play with real friends by swapping codes in any chat',px+18,yy+8,8,'#8d88b5','left',false);
+    yy+=22;
+    var frRows=[
+      ['VISIT A FRIEND','paste an island code they shared',function(){
+        var code=window.prompt("Paste your friend's island code:");
+        if(code)visitCode(code);}],
+      ['SEND A GIFT','wrap coins or gems into a code',function(){
+        var what=window.prompt('Gift what? (coins, mini, bit, large, sup, shell, pearl)','coins');
+        if(!what)return;what=what.trim().toLowerCase();
+        var ok=what==='coins'||S.bag[what]!==undefined;
+        if(!ok){S.hint='Cannot gift that';S.hintT=2;return;}
+        var amt=parseInt(window.prompt('How many?','25')||'0',10);
+        if(!amt||amt<1)return;
+        if(what==='coins'){if(S.coins<amt){S.hint='Not enough coins';S.hintT=2;return;}S.coins-=amt;}
+        else{if(S.bag[what]<amt){S.hint='Not enough '+KINDNAME[what].toLowerCase();S.hintT=2;return;}S.bag[what]-=amt;}
+        save();
+        window.prompt('Send this gift code to your friend:',giftCode(what,amt));}],
+      ['OPEN A GIFT','paste a gift code you received',function(){
+        var code=window.prompt('Paste the gift code:');
+        if(code)redeemGift(code);}]
+    ];
+    for(var f2=0;f2<frRows.length;f2++){
+      rr(px+16,yy,LDW-32,48,9);fill('#3a3663');line(COL.gold,2.5);
+      txt(frRows[f2][0],px+30,yy+16,11,COL.cream);
+      txt(frRows[f2][1],px+30,yy+33,8,'#8d88b5','left',false);
+      btn(px+16,yy,LDW-32,48,frRows[f2][2]);
+      yy+=56;
+    }
+    txt('gifts can only be opened once per player',px+18,yy+8,8,'#6a6590','left',false);
+    yy+=20;
+  }
   txt('"Location, location, location." - The Crab',px+LDW/2,yy+14,9,'#8d88b5','center',false);
   yy+=32;
   X.restore();
@@ -1602,6 +1866,39 @@ function drawScfg(){
   txt('X',px+pw-24,py+19,11,COL.cream,'center');
   scfgBtns.push({x:px+pw-36,y:py+8,w:24,h:22,f:function(){S.scfg=null;S.linking=null;}});
 }
+/* the worker crab's concierge: all three services anywhere */
+var crabBtns=[];
+function drawCrabP(){
+  var cb=S.crabP;if(!cb)return;
+  var pw=250,ph=176,px=clamp(cx(cb.x)+TS-pw/2,10,W-pw-10),py=cy(cb.y)+TS*2+10;
+  if(py+ph>H-BOT-6)py=cy(cb.y)-ph-14;
+  rr(px,py,pw,ph,12);fill('#3d2413');line('#ff6a3d',3);
+  txt('CONCIERGE CRAB',px+14,py+18,12,'#ffb08a');
+  txt('"The boss lets me do everything!"',px+14,py+34,8,'#c9926d','left',false);
+  crabBtns=[];
+  var rows=[['TRADE - the mantis desk',function(){S.crabP=null;S.shop=true;S.sscroll=0;S.amtFocus=true;}],
+            ['PRIZES - the parrot desk',function(){S.crabP=null;S.parrot=true;}],
+            ['ISLANDS - the property desk',function(){S.crabP=null;S.land=true;S.lscroll=0;}]];
+  for(var i=0;i<3;i++){
+    var ry=py+46+i*38;
+    rr(px+14,ry,pw-28,32,8);fill('#5a3820');line('#ff6a3d',2);
+    txt(rows[i][0],px+28,ry+16,9,COL.cream);
+    crabBtns.push({x:px+14,y:ry,w:pw-28,h:32,f:rows[i][1]});
+  }
+  rr(px+pw-36,py+8,24,22,6);fill('#5a3820');line('#ff6a3d',2);
+  txt('X',px+pw-24,py+19,11,COL.cream,'center');
+  crabBtns.push({x:px+pw-36,y:py+8,w:24,h:22,f:function(){S.crabP=null;}});
+}
+function drawLore(){
+  var n=S.lore;if(!n||!A.npcSpot)return;
+  var pw=340,ph=86,px=clamp(A.npcSpot.wx-pw/2,10,W-pw-10),py=A.npcSpot.wy-ph-64;
+  if(py<OY+6)py=A.npcSpot.wy+16;
+  rr(px,py,pw,ph,12);fill(COL.cream);line(COL.dark,3);
+  X.beginPath();X.moveTo(A.npcSpot.wx-8,py+ph);X.lineTo(A.npcSpot.wx,py+ph+10);X.lineTo(A.npcSpot.wx+8,py+ph);X.closePath();fill(COL.cream);
+  txt(n.name,px+14,py+16,11,'#5a3820');
+  txt('"'+n.lore[S.loreN]+'"',px+14,py+40,9,'#3a3557','left',false);
+  txt('('+(S.loreN+1)+'/'+n.lore.length+' - click me for more)',px+pw-14,py+70,8,'#8d88b5','right',false);
+}
 var ccfgBtns=[];
 function drawCcfg(){
   var cf=S.ccfg;if(!cf)return;
@@ -1651,6 +1948,7 @@ function overLord(){
 C.addEventListener('contextmenu',function(e){
   e.preventDefault();
   if(S.shop||S.inv||S.parrot||S.land||!mouse.in)return;
+  if(!A.owned){S.hint='This island is not yours';S.hintT=2;return;}
   var c=cell(mouse.gx,mouse.gy);
   if(!c)return;
   if(c.t==='deco'){clearPalm(mouse.gx,mouse.gy);save();return;}
@@ -1698,6 +1996,11 @@ C.addEventListener('mousedown',function(e){
     if(mouse.sx<LDX||mouse.sx>LDX+LDW||mouse.sy<LDY||mouse.sy>LDY+LDH){S.land=false;S.renIdx=-1;}
     return;
   }
+  if(S.crabP){
+    for(i=0;i<crabBtns.length;i++){var b8=crabBtns[i];
+      if(mouse.sx>=b8.x&&mouse.sx<=b8.x+b8.w&&mouse.sy>=b8.y&&mouse.sy<=b8.y+b8.h){b8.f();return;}}
+    S.crabP=null;
+  }
   if(S.ccfg){
     for(i=0;i<ccfgBtns.length;i++){var b6=ccfgBtns[i];
       if(mouse.sx>=b6.x&&mouse.sx<=b6.x+b6.w&&mouse.sy>=b6.y&&mouse.sy<=b6.y+b6.h){b6.f();return;}}
@@ -1717,6 +2020,11 @@ C.addEventListener('mousedown',function(e){
     }
     S.scfg=null;S.linking=null;
   }
+  /* leave a visited island */
+  if(!CURI.owned&&mouse.sx>=180&&mouse.sx<=242&&mouse.sy>=OY+4&&mouse.sy<=OY+30){
+    dropTempIsles();gotoIsle(0);
+    S.hint='Back home';S.hintT=2;beep(600,0.05,'sine',0.04);return;
+  }
   /* island switcher */
   if(ISLES.length>1&&mouse.sy>=isleUI.l.y&&mouse.sy<=isleUI.l.y+isleUI.l.h){
     if(mouse.sx>=isleUI.l.x&&mouse.sx<=isleUI.l.x+isleUI.l.w){
@@ -1734,9 +2042,17 @@ C.addEventListener('mousedown',function(e){
   if(overStall()){S.shop=true;S.sscroll=0;S.amtFocus=true;M.talk=0;beep(520,0.09,'triangle',0.05);return;}
   if(overParrot()){S.parrot=true;beep(560,0.08,'triangle',0.05);return;}
   if(overLord()){S.land=true;S.lscroll=0;beep(500,0.08,'triangle',0.05);return;}
-  if(mouse.in){
+  /* npc islander chat */
+  if(A.npc&&A.npcSpot&&Math.abs(mouse.sx-A.npcSpot.wx)<26&&mouse.sy>A.npcSpot.wy-56&&mouse.sy<A.npcSpot.wy+10){
+    if(S.lore===A.npc)S.loreN=(S.loreN+1)%A.npc.lore.length;
+    else{S.lore=A.npc;S.loreN=0;}
+    beep(620,0.06,'sine',0.05);return;
+  }
+  if(S.lore){S.lore=null;}
+  if(mouse.in&&A.owned){
     var st=structAt(mouse.gx,mouse.gy);
     if(st){
+      if(st.t==='crab'){S.crabP=st;beep(640,0.06,'triangle',0.05);return;}
       if(st.t==='scan'){S.scfg=st;S.ccfg=null;S.linking=null;beep(700,0.05,'sine',0.04);return;}
       if(st.t==='craft'){S.ccfg=st;S.scfg=null;S.linking=null;beep(700,0.05,'sine',0.04);return;}
       if(st.t==='gate'){st.open=!st.open;
@@ -1749,6 +2065,7 @@ C.addEventListener('mousedown',function(e){
       }
     }
   }
+  if(!A.owned)return;   /* no collecting or building on someone else's island */
   var got=0,lastx=0,lasty=0,gotKinds={};
   for(i=A.loose.length-1;i>=0;i--){var l=A.loose[i];
     if(!l.land)continue;
@@ -1802,7 +2119,7 @@ window.addEventListener('keydown',function(e){
   else if(k==='e'||k==='E'){S.shop=!S.shop;S.inv=false;S.parrot=false;S.land=false;S.sscroll=0;S.amtFocus=S.shop;}
   else if(k==='['){gotoIsle((S.isle-1+ISLES.length)%ISLES.length);}
   else if(k===']'){gotoIsle((S.isle+1)%ISLES.length);}
-  else if(k==='Escape'){S.shop=false;S.inv=false;S.parrot=false;S.land=false;S.scfg=null;S.ccfg=null;S.linking=null;S.amtFocus=false;}
+  else if(k==='Escape'){S.shop=false;S.inv=false;S.parrot=false;S.land=false;S.scfg=null;S.ccfg=null;S.crabP=null;S.lore=null;S.linking=null;S.amtFocus=false;}
   else if(k==='r'||k==='R'){S.dir=(S.dir+1)%4;rotateHover();}
   else if(k.indexOf('Arrow')===0){
     e.preventDefault();
@@ -1814,7 +2131,7 @@ window.addEventListener('keydown',function(e){
 /* ---------- save / load ---------- */
 function save(){
   try{
-    var isles=ISLES.map(function(I){
+    var isles=ISLES.filter(function(I){return I.owned;}).map(function(I){
       var belts=[];
       for(var y=0;y<GH;y++)for(var x=0;x<GW;x++){var c=I.cells[y*GW+x];
         if(c&&c.t==='belt')belts.push([x,y,c.dir]);}
@@ -1896,6 +2213,7 @@ function frame(now){
   /* simulate every owned island */
   for(var ii=0;ii<ISLES.length;ii++){
     A=ISLES[ii];
+    if(!A.owned&&A!==CURI)continue;   /* guest and npc islands only tick while watched */
     for(var i=0;i<A.structs.length;i++){var s=A.structs[i];
       if(s.t==='miner'||s.t==='mini'||s.t==='sup'||s.t==='aqua'||s.t==='dredge'){
         var cad=s.t==='mini'?2.0:(s.t==='sup'?2.8:(s.t==='aqua'?2.6:(s.t==='dredge'?3.0:2.4)));
@@ -1949,6 +2267,7 @@ function frame(now){
     list.push({wy:PARROT.wy,wx:PARROT.wx,k:'parrot'});
     list.push({wy:LORD.wy,wx:LORD.wx,k:'lord'});
   }
+  if(CURI.npc&&CURI.npcSpot)list.push({wy:CURI.npcSpot.wy,wx:CURI.npcSpot.wx,k:'npcc'});
   for(var pl=0;pl<A.palms.length;pl++)list.push({wy:cy(A.palms[pl].y)+TS-4,wx:cx(A.palms[pl].x)+TS/2,k:'palm',o:A.palms[pl]});
   for(var it3=0;it3<A.items.length;it3++){var it=A.items[it3],bi2=beltInfo(it.cx,it.cy);
     var d2=bi2?bi2.dir:0;
@@ -1965,12 +2284,14 @@ function frame(now){
     else if(e3.k==='comp')drawComp(e3.o);
     else if(e3.k==='craft')drawCraft(e3.o);
     else if(e3.k==='aqua')drawAqua(e3.o);
+    else if(e3.k==='crab')drawCrabStand(e3.o);
     else if(e3.k==='dredge')drawDredge(e3.o);
     else if(e3.k==='gw')drawGwRing(e3.o);
     else if(e3.k==='stall')drawStall();
     else if(e3.k==='mantis')drawMantis();
     else if(e3.k==='parrot')drawParrot();
     else if(e3.k==='lord')drawLord();
+    else if(e3.k==='npcc')drawNpcCritter(CURI.npc);
     else if(e3.k==='palm')drawPalm(e3.o);
     else if(e3.k==='gem'){drawBit(0,0,0.85,true,e3.kind);}
     else if(e3.k==='loose'){shadow(6,2.5);drawBit(0,-8-e3.o.z,0.8,true,e3.o.kind);
@@ -1985,6 +2306,8 @@ function frame(now){
     X.globalAlpha=clamp(q3.a,0,1);txt(q3.t,q3.x,q3.y-20,11,q3.c,'center');X.globalAlpha=1;}
   if(S.scfg&&!S.shop&&!S.inv&&!S.parrot&&!S.land)drawScfg();
   if(S.ccfg&&!S.shop&&!S.inv&&!S.parrot&&!S.land)drawCcfg();
+  if(S.crabP&&!S.shop&&!S.inv&&!S.parrot&&!S.land)drawCrabP();
+  if(S.lore&&!S.shop&&!S.inv&&!S.parrot&&!S.land)drawLore();
   drawTut();
   drawIsleUI();
   drawHud();
