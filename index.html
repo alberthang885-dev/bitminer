@@ -229,6 +229,7 @@ var S={bag:{mini:0,bit:0,large:0,sup:0,anom:0,shell:0,pearl:0},
   hint:'Visit the mantis stall to trade',hintT:6};
 
 function canPlace(t,x,y){var n=sizeOf(t),ter=TERRAIN[t]||'land';
+  if(t==='crab'&&A.home)return false;   /* the boss crab allows no branch offices at HQ */
   for(var j=0;j<n;j++)for(var i2=0;i2<n;i2++){
     if(!inGrid(x+i2,y+j))return false;
     if(cell(x+i2,y+j))return false;
@@ -1394,7 +1395,7 @@ var ITEMS=[
  {k:'craft',name:'CRAFTER',hot:'',desc:'Eats bits, builds machines. Click it to pick one.'},
  {k:'aqua',name:'AQUA MINER',hot:'',desc:'Water only. Dredges bit, shells and pearls.'},
  {k:'dredge',name:'DREDGER',hot:'',desc:'One square of water. Scoops up seashells.'},
- {k:'crab',name:'CONCIERGE CRAB',hot:'',desc:'A worker crab: trade, prizes and property anywhere.'},
+ {k:'crab',name:'CONCIERGE CRAB',hot:'',desc:'All three NPC services - for your OTHER islands.'},
  {k:'gw',name:'GATEWAY',hot:'',desc:'Bits teleport between gateways - even between islands.'}];
 function itemName(k){for(var i=0;i<ITEMS.length;i++)if(ITEMS[i].k===k)return ITEMS[i].name;return k;}
 function invTotal(){var n=0;for(var k in S.stock)n+=S.stock[k];return n;}
@@ -2082,7 +2083,8 @@ C.addEventListener('mousedown',function(e){
     beep(160,0.1,'sawtooth',0.04);return;}
   if(!canPlace(t2,mouse.gx,mouse.gy)){
     var ter=TERRAIN[t2];
-    S.hint=ter==='water'?'That needs open water':(ter==='land'&&!isLand(mouse.gx,mouse.gy)?'That needs dry land':'No room there');
+    S.hint=(t2==='crab'&&A.home)?'The boss crab allows no concierge stalls on the home island'
+      :ter==='water'?'That needs open water':(ter==='land'&&!isLand(mouse.gx,mouse.gy)?'That needs dry land':'No room there');
     S.hintT=1.5;beep(180,0.08,'sawtooth',0.035);return;}
   place(t2,mouse.gx,mouse.gy,S.dir);S.stock[t2]--;
   sparkle(cx(mouse.gx)+TS/2*sizeOf(t2),cy(mouse.gy)+TS/2*sizeOf(t2),COL.gold,6);
