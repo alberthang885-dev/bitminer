@@ -47,7 +47,7 @@ var CURS=['mini','bit','shell','large','pearl','sup','lsup','ultra','lultra'];
 
 /* ---------- machine catalogue ---------- */
 var SIZES={belt:1,mini:1,scan:1,gate:1,sep:1,dredge:1,gen:2,lgen:3,miner:2,seller:2,sup:2,ult:2,comp:2,craft:2,aqua:2,crab:2,gw:3};
-var TERRAIN={belt:'both',scan:'both',gate:'both',sep:'both',gw:'both',crab:'land',gen:'both',lgen:'both',
+var TERRAIN={belt:'both',scan:'both',gate:'both',sep:'both',gw:'both',crab:'land',gen:'land',lgen:'both',
   miner:'land',mini:'land',sup:'land',ult:'land',seller:'land',comp:'land',craft:'land',
   aqua:'water',dredge:'water'};
 var PRICES={belt:25,mini:150,miner:600,seller:400,scan:120,gate:120,sep:200,gen:0,lgen:0,comp:900,craft:1200,sup:9000,gw:15000,aqua:1400,dredge:450,crab:1500,ult:30000};
@@ -180,6 +180,67 @@ var CATALOG=[
 })();
 function catByKey(k){for(var i=0;i<CATALOG.length;i++)if(CATALOG[i].key===k)return CATALOG[i];return null;}
 /* neighbour NPCs with their own half-built factories and stories */
+/* ---------- Portside: the big town island everyone sails to ---------- */
+var TOWN_CAT={key:'town',name:'Portside',type:'land',scale:1.34,seed:4242};
+var TOWNFOLK=[
+ {n:'Mayor Pomp',c1:'#ffd23f',c2:'#ff6b9d',l:['Portside welcomes every islander, however small their factory.','We built the harbour before the bit rush. Now look at us.','Taxes? Never heard of them. Ask the crab.']},
+ {n:'Nib the Clerk',c1:'#bfeaff',c2:'#2f7fe0',l:['The bank pays interest while you are away mining.','Coins in the vault are safe from anomalies. Probably.','I count the same drawer nine times a day. It soothes me.']},
+ {n:'Old Barnacle',c1:'#9aa4b5',c2:'#c98b4b',l:['I remember when this was all water. Just water.','A gateway once swallowed my hat. It came back damp.','Feed your generator, lad. Cold machines make cold soup.']},
+ {n:'Tess the Baker',c1:'#ffb3d9',c2:'#fff4d6',l:['I bake bit-shaped buns. They are not edible gems, sadly.','The mantis buys a dozen every Tuesday. Never explains why.','Flour, water, patience. Same as a factory really.']},
+ {n:'Rusty',c1:'#ff8a5b',c2:'#5b6270',l:['Conveyors jam when you are not watching. Fact.','I fixed a separator once. It thanked me. I left.','Ultra bits hum at night. You get used to it.']},
+ {n:'Marla the Diver',c1:'#2fd6a5',c2:'#ffd23f',l:['Pearls come from the deep water. Bring a big dredger.','Coral Deep glows. I do not swim there after dark.','The sea gives, the sea takes, the sea overcharges.']},
+ {n:'Pim',c1:'#c07bff',c2:'#fff4d6',l:['I am saving for one super miner. One!','Do you really own islands? Plural?','My whole factory is two belts and a dream.']},
+ {n:'Captain Hale',c1:'#2f7fe0',c2:'#ffd23f',l:['I ferry islanders out to the neighbours all day.','Every island out there was empty once. Someone chose it.','Fair winds. Mind the anomalies.']},
+ {n:'Sprig',c1:'#7ce7a2',c2:'#c98b4b',l:['I plant the palms. Please stop cutting them down.','Twenty five coins a tree. I set that price. I regret it.','Trees do not draw power, you know.']},
+ {n:'Doria',c1:'#ff6b9d',c2:'#2b2a45',l:['The market moves in moods, not numbers.','Sell high. That is the whole lesson. Good talk.','I once held bit until it hit ten. I still dream of it.']}
+];
+var TOWNBUILD=[
+ {k:'bank',w:4,h:3,label:'BANK'},
+ {k:'hall',w:5,h:3,label:'TOWN HALL'},
+ {k:'light',w:2,h:3,label:''},
+ {k:'house',w:3,h:2,label:''},
+ {k:'house',w:3,h:2,label:''},
+ {k:'house',w:2,h:2,label:''},
+ {k:'shop',w:3,h:2,label:'MARKET'},
+ {k:'house',w:2,h:2,label:''},
+ {k:'shop',w:3,h:2,label:'CAFE'}
+];
+function genTown(){
+  var I=genIsle(TOWN_CAT);
+  I.owned=false;I.town=true;I.name='Portside';
+  var back=A;A=I;
+  I.builds=[];I.folk=[];
+  /* lay the buildings out around the middle of the island */
+  var spots=[[6,4],[14,3],[26,4],[5,9],[10,13],[17,15],[21,9],[27,13],[24,16]];
+  for(var i=0;i<TOWNBUILD.length;i++){
+    var b=TOWNBUILD[i],sp=spots[i%spots.length],put=null;
+    for(var r=0;r<9&&!put;r++)for(var yy=sp[1]-r;yy<=sp[1]+r&&!put;yy++)for(var xx=sp[0]-r;xx<=sp[0]+r;xx++){
+      var ok=true;
+      for(var j2=0;j2<b.h&&ok;j2++)for(var i2=0;i2<b.w;i2++){
+        if(!isLand(xx+i2,yy+j2)||I.cells[(yy+j2)*GW+xx+i2]||I.SAND[(yy+j2)*GW+xx+i2]){ok=false;break;}}
+      if(ok)put={x:xx,y:yy};
+    }
+    if(!put)continue;
+    for(var j3=0;j3<b.h;j3++)for(var i3=0;i3<b.w;i3++)I.cells[(put.y+j3)*GW+put.x+i3]={t:'build'};
+    I.builds.push({k:b.k,x:put.x,y:put.y,w:b.w,h:b.h,label:b.label,
+      wx:cx(put.x)+b.w*TS/2,wy:cy(put.y)+b.h*TS-3});
+  }
+  /* scatter the townsfolk on free grass */
+  for(var f=0;f<TOWNFOLK.length;f++){
+    var t=TOWNFOLK[f],got=null;
+    for(var a=0;a<200&&!got;a++){
+      var gx=2+Math.floor(hash(f*13+a,TOWN_CAT.seed)*(GW-4)),
+          gy=2+Math.floor(hash(a*7,f*11+TOWN_CAT.seed)*(GH-3));
+      if(isLand(gx,gy)&&!I.cells[gy*GW+gx])got={x:gx,y:gy};
+    }
+    if(!got)continue;
+    I.cells[got.y*GW+got.x]={t:'npc'};
+    I.folk.push({name:t.n,c1:t.c1,c2:t.c2,lore:t.l,x:got.x,y:got.y,
+      wx:cx(got.x)+TS/2,wy:cy(got.y)+TS-2,ph:hash(f,7)*6.3});
+  }
+  A=back;
+  return I;
+}
 var EMPLOYEES=[
  {name:'Sparky',c1:'#ffd23f',c2:'#ff8a5b'},
  {name:'Fuse',c1:'#7ce7a2',c2:'#2f7fe0'},
@@ -264,6 +325,7 @@ var S={bag:{mini:0,bit:0,large:0,sup:0,anom:0,shell:0,pearl:0,ultra:0,lsup:0,lul
   shop:false,inv:false,parrot:false,land:false,ltab:'own',confirm:null,power:false,moveNpc:null,scfg:null,ccfg:null,linking:null,crabP:null,lore:null,loreN:0,
   amt:'',amtFocus:false,sscroll:0,sscrollMax:0,iscroll:0,iscrollMax:0,lscroll:0,lscrollMax:0,
   renIdx:-1,renTxt:'',
+  bank:{bal:0,pend:0,earned:0},bankTxt:'',bankFocus:false,bankOpen:false,loreAt:null,
   sold:0,mined:0,tut:0,tutT:0,didPickup:false,sawParrot:false,sawLand:false,pops:[],spark:[],
   hint:'Visit the mantis stall to trade',hintT:6};
 
@@ -384,6 +446,7 @@ var VOLT=(function(){
   for(var y=1;y<GH-4;y++)for(var x=1;x<GW-3;x++){
     if(!canPlace('gen',x,y))continue;
     if(!isLand(x,y+3)||HOME.cells[(y+3)*GW+x])continue;   /* room for Volt below it */
+    if(HOME.SAND[(y+1)*GW+x])continue;                      /* keep the yard off the beach */
     var sc=clearance(x+1,y+1);
     if(sc>bs){bs=sc;best={x:x,y:y};}
   }
@@ -528,6 +591,11 @@ function sparkle(x,y,c,n){if(A!==CURI)return;
   for(var i=0;i<(n||6);i++){var a=Math.random()*6.28,s=20+Math.random()*45;
   S.spark.push({x:x,y:y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-20,l:0.5+Math.random()*0.4,t:0,c:c||COL.bit});}}
 
+/* ---------- the bank ---------- */
+var BANK_RATE=0.00005;      /* per second, per coin: about 0.3% a minute */
+function bankTick(dt){
+  if(S.bank.bal>0)S.bank.pend+=S.bank.bal*BANK_RATE*dt;
+}
 /* ---------- economy ---------- */
 function unlock(k){
   if(k==='anom'||S.unlocked[k])return;
@@ -1578,6 +1646,66 @@ function drawEmployee(e){
   X.strokeStyle=COL.gold;X.lineWidth=2.2;X.lineCap='round';X.lineJoin='round';
   X.beginPath();X.moveTo(2,by-5);X.lineTo(-2,by);X.lineTo(1,by);X.lineTo(-2,by+5);X.stroke();
 }
+function drawTownBuilding(b){
+  var w=b.w*TS/SPR,h=b.h*TS/SPR;
+  shadow(w*0.46,9);
+  X.save();X.translate(0,-h*0.62);
+  if(b.k==='light'){
+    /* lighthouse */
+    X.beginPath();X.moveTo(-13,26);X.lineTo(-9,-30);X.lineTo(9,-30);X.lineTo(13,26);X.closePath();
+    fill(COL.cream);line(COL.dark,3);
+    X.fillStyle='#ff6b6b';
+    X.beginPath();X.moveTo(-11.5,8);X.lineTo(11.5,8);X.lineTo(10.6,-4);X.lineTo(-10.6,-4);X.closePath();X.fill();
+    X.beginPath();X.moveTo(-9.7,-16);X.lineTo(9.7,-16);X.lineTo(9,-26);X.lineTo(-9,-26);X.closePath();X.fill();
+    rr(-11,-42,22,13,3);fill('#bfeaff');line(COL.dark,2.5);
+    X.globalAlpha=0.45+0.35*Math.sin(T*2);
+    X.fillStyle=COL.gold;X.beginPath();X.arc(0,-36,5,0,6.3);X.fill();X.globalAlpha=1;
+    X.beginPath();X.moveTo(-13,-42);X.lineTo(13,-42);X.lineTo(0,-52);X.closePath();fill('#ff6b6b');line(COL.dark,2.5);
+  } else {
+    var body=b.k==='bank'?'#e8e2ff':(b.k==='hall'?'#ffe3a3':(b.k==='shop'?'#bfeaff':COL.cream));
+    var roof=b.k==='bank'?'#7b6ba8':(b.k==='hall'?'#c98b4b':(b.k==='shop'?'#2f7fe0':'#ff8a5b'));
+    rr(-w/2+3,-8,w-6,h*0.62+8,5);fill(body);line(COL.dark,3);
+    /* roof */
+    X.beginPath();X.moveTo(-w/2-1,-8);X.lineTo(0,-8-h*0.42);X.lineTo(w/2+1,-8);X.closePath();
+    fill(roof);line(COL.dark,3);
+    /* windows + door */
+    var wn=Math.max(1,Math.floor(w/22));
+    for(var i=0;i<wn;i++){
+      var wx2=-w/2+12+i*((w-24)/Math.max(1,wn-1||1));
+      if(wn===1)wx2=-w/4;
+      rr(wx2-5,2,10,9,2);fill('#3fc4e8');line(COL.dark,2);
+    }
+    rr(w/4-6,h*0.62-9,13,17,3);fill('#8a5c2c');line(COL.dark,2.5);
+    X.fillStyle=COL.gold;X.beginPath();X.arc(w/4+3,h*0.62-1,1.6,0,6.3);X.fill();
+    if(b.k==='bank'){
+      /* columns + coin sign */
+      for(var c2=0;c2<3;c2++){
+        rr(-w/2+9+c2*11,-4,5,h*0.62+2,2);fill('#fff');line(COL.dark,1.6);
+      }
+      X.fillStyle=COL.gold;X.beginPath();X.arc(0,-8-h*0.42+16,7,0,6.3);X.fill();line('#b8891b',2.2);
+      txt('c',0,-8-h*0.42+16,9,'#b8891b','center');
+    }
+    if(b.label){
+      rr(-w/4-16,-6-h*0.42*0.2,Math.max(34,b.label.length*6.4),13,3);fill(COL.dark);
+      txt(b.label,-b.label.length*3.2+Math.max(34,b.label.length*6.4)/2-17,0.5-h*0.42*0.2,8,COL.cream,'center');
+    }
+  }
+  X.restore();
+}
+function drawFolk(f){
+  var b=Math.sin(T*2.1+f.ph)*1.2;
+  shadow(11,4.5);
+  X.save();X.translate(0,-12+b);
+  X.beginPath();X.ellipse(0,0,8,10,0,0,6.3);fill(f.c1);line(COL.dark,2.2);
+  X.fillStyle=f.c2;X.beginPath();X.ellipse(0,4,5,5.5,0,0,6.3);X.fill();
+  X.beginPath();X.arc(2,-10,6,0,6.3);fill(f.c1);line(COL.dark,2.2);
+  X.fillStyle='#fff';X.beginPath();X.arc(4,-11,2.5,0,6.3);X.fill();line(COL.dark,1.2);
+  X.fillStyle=COL.dark;X.beginPath();X.arc(4.6,-10.8,1.25,0,6.3);X.fill();
+  X.beginPath();X.moveTo(8,-10);X.quadraticCurveTo(13,-9,10,-6);X.closePath();fill(f.c2);line(COL.dark,1.4);
+  X.strokeStyle=COL.dark;X.lineWidth=1.8;X.lineCap='round';
+  X.beginPath();X.moveTo(-3,10);X.lineTo(-3,13);X.moveTo(3,10);X.lineTo(3,13);X.stroke();
+  X.restore();
+}
 function drawStall(){
   shadow(58,11);
   X.save();X.translate(0,-16);
@@ -2240,6 +2368,25 @@ function drawLordPanel(){
   else if(S.ltab==='nbr'){
     txt('the crab can sail you out to the neighbours',px+18,yy+8,8,'#8d88b5','left',false);
     yy+=18;
+    /* the town comes first - everyone goes to Portside */
+    rr(px+16,yy,LDW-32,52,9);fill('#3a3663');line(COL.gold,2.5);
+    X.save();X.translate(px+40,yy+26);
+    X.fillStyle='#3fc4e8';X.beginPath();X.arc(0,0,13,0,6.3);X.fill();line('#12557a',2);
+    X.fillStyle=COL.grass;X.beginPath();X.ellipse(0,0,10,8,0,0,6.3);X.fill();
+    X.fillStyle=COL.cream;rr(-6,-5,5,6,1);X.fill();rr(1,-2,5,5,1);X.fill();
+    X.fillStyle='#ff8a5b';X.beginPath();X.moveTo(-7,-5);X.lineTo(-3.5,-9);X.lineTo(0,-5);X.closePath();X.fill();
+    X.restore();
+    txt('PORTSIDE',px+62,yy+18,12,COL.gold);
+    txt('the big town - bank, market hall, lighthouse and a crowd',px+62,yy+34,8,'#8d88b5','left',false);
+    rr(px+LDW-84,yy+13,56,26,7);fill('#3d6b45');line('#6bf28a',2);
+    txt('SAIL',px+LDW-56,yy+26,9,COL.cream,'center');
+    btn(px+LDW-84,yy+13,56,26,function(){
+      dropTempIsles();
+      var TI=genTown();ISLES.push(TI);gotoIsle(ISLES.length-1);
+      S.land=false;S.hint='Welcome to Portside - visit the bank!';S.hintT=4;
+      beep(700,0.08,'triangle',0.05);setTimeout(function(){beep(940,0.09,'triangle',0.05);},90);
+    });
+    yy+=60;
     for(var n2=0;n2<NPCS.length;n2++){
       var np=NPCS[n2];
       rr(px+16,yy,LDW-32,44,9);fill('#242140');line('#3a3663',2);
@@ -2369,11 +2516,13 @@ function drawCrabP(){
   crabBtns.push({x:px+pw-36,y:py+8,w:24,h:22,f:function(){S.crabP=null;}});
 }
 function drawLore(){
-  var n=S.lore;if(!n||!A.npcSpot)return;
-  var pw=340,ph=86,px=clamp(A.npcSpot.wx-pw/2,10,W-pw-10),py=A.npcSpot.wy-ph-64;
-  if(py<OY+6)py=A.npcSpot.wy+16;
+  var n=S.lore;if(!n)return;
+  var at=S.loreAt||(A.npcSpot?{wx:A.npcSpot.wx,wy:A.npcSpot.wy}:null);
+  if(!at)return;
+  var pw=340,ph=86,px=clamp(at.wx-pw/2,10,W-pw-10),py=at.wy-ph-64;
+  if(py<OY+6)py=at.wy+16;
   rr(px,py,pw,ph,12);fill(COL.cream);line(COL.dark,3);
-  X.beginPath();X.moveTo(A.npcSpot.wx-8,py+ph);X.lineTo(A.npcSpot.wx,py+ph+10);X.lineTo(A.npcSpot.wx+8,py+ph);X.closePath();fill(COL.cream);
+  X.beginPath();X.moveTo(at.wx-8,py+ph);X.lineTo(at.wx,py+ph+10);X.lineTo(at.wx+8,py+ph);X.closePath();fill(COL.cream);
   txt(n.name,px+14,py+16,11,'#5a3820');
   txt('"'+n.lore[S.loreN]+'"',px+14,py+40,9,'#3a3557','left',false);
   txt('('+(S.loreN+1)+'/'+n.lore.length+' - click me for more)',px+pw-14,py+70,8,'#8d88b5','right',false);
@@ -2451,6 +2600,80 @@ function drawPower(){
   rr(px+PWW-38,py+8,26,24,7);fill('#8a6a10');line('#5c4405',2.5);
   txt('X',px+PWW-25,py+20,12,COL.cream,'center');
   powBtns.unshift({x:px+PWW-42,y:py+4,w:34,h:32,f:function(){S.power=false;}});
+}
+/* ---------- the Portside bank ---------- */
+var BKW=430,BKH=300,BKX=(W-BKW)/2,BKY=(H-BKH)/2;
+var bankBtns=[];
+function bankMove(dir){
+  var n=parseInt(S.bankTxt||'0',10)||0;
+  if(n<1){S.hint='Type an amount first';S.hintT=2;beep(160,0.1,'sawtooth',0.04);return;}
+  if(dir>0){
+    n=Math.min(n,S.coins);
+    if(n<1){S.hint='You have no coins to deposit';S.hintT=2;return;}
+    S.coins-=n;S.bank.bal+=n;S.hint='Deposited '+n+'c';
+  } else {
+    n=Math.min(n,Math.floor(S.bank.bal));
+    if(n<1){S.hint='Nothing in the vault';S.hintT=2;return;}
+    S.bank.bal-=n;S.coins+=n;S.hint='Withdrew '+n+'c';
+  }
+  S.hintT=3;S.bankTxt='';beep(dir>0?520:660,0.07,'square',0.05);save();
+}
+function bankCollect(){
+  var g=Math.floor(S.bank.pend);
+  if(g<1){S.hint='No interest to collect yet';S.hintT=2.5;beep(300,0.06,'sine',0.04);return;}
+  S.bank.pend-=g;S.coins+=g;S.bank.earned+=g;
+  pop(W/2,H/2,'+'+g+'c interest',COL.gold);
+  S.hint='Collected '+g+'c in interest';S.hintT=3.5;
+  chaChing(false);save();
+}
+function drawBank(){
+  X.fillStyle='rgba(20,17,40,.62)';X.fillRect(0,0,W,H);
+  var px=BKX,py=BKY;
+  rr(px,py,BKW,BKH,16);fill('#2a2748');line('#7b6ba8',4);
+  X.save();X.beginPath();X.roundRect(px,py,BKW,BKH,16);X.clip();
+  X.fillStyle='#7b6ba8';X.fillRect(px,py,BKW,42);X.restore();
+  txt('BANK OF PORTSIDE',px+18,py+22,13,'#241d3e');
+  X.fillStyle=COL.gold;X.beginPath();X.arc(px+BKW-64,py+21,11,0,6.3);X.fill();line('#b8891b',2.2);
+  txt('c',px+BKW-64,py+21,11,'#b8891b','center');
+  bankBtns=[];
+  rr(px+16,py+54,BKW-32,62,10);fill('#211f3c');line('#3a3663',2);
+  txt('IN THE VAULT',px+32,py+72,8,'#8d88b5');
+  txt(Math.floor(S.bank.bal)+'c',px+32,py+96,20,COL.bit2);
+  txt('INTEREST WAITING',px+BKW-170,py+72,8,'#8d88b5');
+  txt(S.bank.pend.toFixed(1)+'c',px+BKW-170,py+96,20,S.bank.pend>=1?'#6bf28a':'#6a6590');
+  txt('earns about '+(S.bank.bal*BANK_RATE*60).toFixed(1)+'c a minute, even while you mine',
+      px+16,py+130,9,'#8d88b5','left',false);
+  /* amount box */
+  var ab={x:px+16,y:py+146,w:150,h:40};
+  rr(ab.x,ab.y,ab.w,ab.h,8);fill('#211f3c');line(S.bankFocus?COL.bit:'#3a3663',S.bankFocus?3:2);
+  var shown=S.bankTxt||'';
+  txt(shown||'0',ab.x+12,ab.y+20,15,shown?COL.cream:'#5a5480');
+  if(S.bankFocus&&Math.floor(T*2)%2===0){
+    X.font='bold 15px Verdana,Geneva,sans-serif';
+    var cw=X.measureText(shown).width;
+    X.fillStyle=COL.bit;X.fillRect(ab.x+14+cw,ab.y+10,2,20);
+  }
+  bankBtns.push({x:ab.x,y:ab.y,w:ab.w,h:ab.h,f:function(){S.bankFocus=true;beep(700,0.03,'sine',0.03);}});
+  rr(px+174,py+146,58,40,8);fill('#3a3663');line('#5a54a0',2.5);
+  txt('ALL',px+203,py+166,10,COL.cream,'center');
+  bankBtns.push({x:px+174,y:py+146,w:58,h:40,f:function(){S.bankTxt=String(S.coins);S.bankFocus=true;beep(600,0.04,'sine',0.03);}});
+  rr(px+240,py+146,88,40,8);fill('#3d6b45');line('#6bf28a',2.5);
+  txt('DEPOSIT',px+284,py+166,10,COL.cream,'center');
+  bankBtns.push({x:px+240,y:py+146,w:88,h:40,f:function(){bankMove(1);}});
+  rr(px+336,py+146,BKW-352,40,8);fill('#5a3f6b');line('#c9a6ff',2.5);
+  txt('WITHDRAW',px+336+(BKW-352)/2,py+166,10,COL.cream,'center');
+  bankBtns.push({x:px+336,y:py+146,w:BKW-352,h:40,f:function(){bankMove(-1);}});
+  /* collect */
+  var can=S.bank.pend>=1;
+  rr(px+16,py+198,BKW-32,48,9);fill(can?'#3d6b45':'#2f2c4e');line(can?'#6bf28a':'#3a3663',2.5);
+  txt(can?('COLLECT '+Math.floor(S.bank.pend)+'c INTEREST'):'no interest to collect yet',
+      px+BKW/2,py+222,12,can?COL.cream:'#6a6590','center');
+  if(can)bankBtns.push({x:px+16,y:py+198,w:BKW-32,h:48,f:bankCollect});
+  txt('lifetime interest: '+S.bank.earned+'c',px+16,py+264,9,'#8d88b5','left',false);
+  txt('"Coins in the vault are safe from anomalies." - Nib',px+BKW-16,py+264,8,'#6a6590','right',false);
+  rr(px+BKW-38,py+8,26,24,7);fill('#4a3d6b');line('#241d3e',2.5);
+  txt('X',px+BKW-25,py+20,12,COL.cream,'center');
+  bankBtns.unshift({x:px+BKW-42,y:py+4,w:34,h:32,f:function(){S.bankOpen=false;S.bankFocus=false;}});
 }
 var ccfgBtns=[];
 function drawCcfg(){
@@ -2570,6 +2793,13 @@ C.addEventListener('mousedown',function(e){
     if(mouse.sx<LDX||mouse.sx>LDX+LDW||mouse.sy<LDY||mouse.sy>LDY+LDH){S.land=false;S.renIdx=-1;}
     return;
   }
+  if(S.bankOpen){
+    for(i=0;i<bankBtns.length;i++){var bb2=bankBtns[i];
+      if(mouse.sx>=bb2.x&&mouse.sx<=bb2.x+bb2.w&&mouse.sy>=bb2.y&&mouse.sy<=bb2.y+bb2.h){bb2.f();return;}}
+    S.bankFocus=false;
+    if(mouse.sx<BKX||mouse.sx>BKX+BKW||mouse.sy<BKY||mouse.sy>BKY+BKH)S.bankOpen=false;
+    return;
+  }
   if(S.power){
     for(i=0;i<powBtns.length;i++){var bp=powBtns[i];
       if(mouse.sx>=bp.x&&mouse.sx<=bp.x+bp.w&&mouse.sy>=bp.y&&mouse.sy<=bp.y+bp.h){bp.f();return;}}
@@ -2626,10 +2856,28 @@ C.addEventListener('mousedown',function(e){
     S.power=true;beep(520,0.08,'triangle',0.05);return;}
   if(CURI.emp&&Math.abs(mouse.sx-CURI.emp.wx)<26&&mouse.sy>CURI.emp.wy-52&&mouse.sy<CURI.emp.wy+10){
     S.crabP={x:CURI.emp.x,y:CURI.emp.y,emp:true};beep(520,0.08,'triangle',0.05);return;}
+  /* the town: banks and gossip */
+  if(CURI.builds){
+    for(i=0;i<CURI.builds.length;i++){var bb=CURI.builds[i];
+      if(mouse.sx>cx(bb.x)&&mouse.sx<cx(bb.x)+bb.w*TS&&mouse.sy>cy(bb.y)-20&&mouse.sy<cy(bb.y)+bb.h*TS){
+        if(bb.k==='bank'){S.bankOpen=true;S.bankFocus=true;beep(560,0.08,'triangle',0.05);return;}
+        S.hint=bb.label?('The '+bb.label.toLowerCase()+' is closed to visitors'):'A Portside home';S.hintT=2;
+        beep(400,0.05,'sine',0.03);return;
+      }}
+  }
+  if(CURI.folk){
+    for(i=0;i<CURI.folk.length;i++){var ff=CURI.folk[i];
+      if(Math.abs(mouse.sx-ff.wx)<24&&mouse.sy>ff.wy-52&&mouse.sy<ff.wy+10){
+        if(S.lore===ff)S.loreN=(S.loreN+1)%ff.lore.length;else{S.lore=ff;S.loreN=0;}
+        S.loreAt={wx:ff.wx,wy:ff.wy};
+        beep(620,0.06,'sine',0.05);return;
+      }}
+  }
   /* npc islander chat */
   if(A.npc&&A.npcSpot&&Math.abs(mouse.sx-A.npcSpot.wx)<26&&mouse.sy>A.npcSpot.wy-56&&mouse.sy<A.npcSpot.wy+10){
     if(S.lore===A.npc)S.loreN=(S.loreN+1)%A.npc.lore.length;
     else{S.lore=A.npc;S.loreN=0;}
+    S.loreAt={wx:A.npcSpot.wx,wy:A.npcSpot.wy};
     beep(620,0.06,'sine',0.05);return;
   }
   if(S.lore){S.lore=null;}
@@ -2710,6 +2958,12 @@ window.addEventListener('keydown',function(e){
     if(k==='Escape'){S.renIdx=-1;return;}
     return;
   }
+  if(S.bankOpen&&S.bankFocus){
+    if(k>='0'&&k<='9'){if((S.bankTxt||'').length<7)S.bankTxt=(S.bankTxt||'')+k;e.preventDefault();return;}
+    if(k==='Backspace'){S.bankTxt=(S.bankTxt||'').slice(0,-1);e.preventDefault();return;}
+    if(k==='Enter'){bankMove(1);e.preventDefault();return;}
+    if(k==='Escape'){S.bankFocus=false;S.bankOpen=false;return;}
+  }
   if(S.shop&&S.amtFocus){
     if(k>='0'&&k<='9'){if((S.amt||'').length<6)S.amt=(S.amt||'')+k;e.preventDefault();return;}
     if(k==='Backspace'){S.amt=(S.amt||'').slice(0,-1);e.preventDefault();return;}
@@ -2723,7 +2977,7 @@ window.addEventListener('keydown',function(e){
   else if(k==='e'||k==='E'){S.shop=!S.shop;S.inv=false;S.parrot=false;S.land=false;S.sscroll=0;S.amtFocus=S.shop;}
   else if(k==='['){gotoIsle((S.isle-1+ISLES.length)%ISLES.length);}
   else if(k===']'){gotoIsle((S.isle+1)%ISLES.length);}
-  else if(k==='Escape'){if(S.moveNpc)npcCancelMove();S.shop=false;S.inv=false;S.parrot=false;S.land=false;S.power=false;S.scfg=null;S.ccfg=null;S.crabP=null;S.lore=null;S.confirm=null;S.linking=null;S.amtFocus=false;}
+  else if(k==='Escape'){if(S.moveNpc)npcCancelMove();S.shop=false;S.inv=false;S.parrot=false;S.land=false;S.power=false;S.bankOpen=false;S.scfg=null;S.ccfg=null;S.crabP=null;S.lore=null;S.confirm=null;S.linking=null;S.amtFocus=false;}
   else if(k==='r'||k==='R'){S.dir=(S.dir+1)%4;rotateHover();}
   else if(k.indexOf('Arrow')===0){
     e.preventDefault();
@@ -2753,7 +3007,7 @@ function save(){
     });
     localStorage.setItem('bitminer7',JSON.stringify({isles:isles,isle:S.isle,
       bag:S.bag,unl:S.unlocked,cur:S.cur,coins:S.coins,stock:S.stock,price:S.price,hist:S.hist,
-      mined:S.mined,sold:S.sold,pts:S.pts,rew:S.rew,supU:S.supUnlocked,gwU:S.gwUnlocked,ulU:S.ultraUnlocked,tut:S.tut,tfl:[S.didPickup?1:0,S.sawParrot?1:0,S.sawLand?1:0],npcs:{stall:[STALL.x,STALL.y],parrot:[PARROT.x,PARROT.y],lord:[LORD.x,LORD.y],volt:VOLT?[VOLT.x,VOLT.y]:null}}));
+      mined:S.mined,sold:S.sold,bank:S.bank,pts:S.pts,rew:S.rew,supU:S.supUnlocked,gwU:S.gwUnlocked,ulU:S.ultraUnlocked,tut:S.tut,tfl:[S.didPickup?1:0,S.sawParrot?1:0,S.sawLand?1:0],npcs:{stall:[STALL.x,STALL.y],parrot:[PARROT.x,PARROT.y],lord:[LORD.x,LORD.y],volt:VOLT?[VOLT.x,VOLT.y]:null}}));
   }catch(e){}
 }
 function load(){
@@ -2804,6 +3058,7 @@ function load(){
     ['mini','scan','gate','sup','ult','comp','craft','gw','aqua','dredge'].forEach(function(kq){
       if(S.stock[kq]===undefined)S.stock[kq]=0;});
     S.hist=(d.hist&&d.hist.length>2)?d.hist.map(function(v){return clamp(v,5,10);}):S.hist;
+    if(d.bank){S.bank.bal=d.bank.bal||0;S.bank.pend=d.bank.pend||0;S.bank.earned=d.bank.earned||0;}
     S.mined=d.mined||0;S.sold=d.sold||0;S.pts=d.pts||0;S.rew=d.rew||0;
     S.supUnlocked=!!d.supU;S.gwUnlocked=!!d.gwU;S.ultraUnlocked=!!d.ulU;
     S.tut=(d.tut===undefined)?TUT.length:d.tut;
@@ -2926,7 +3181,7 @@ function simulate(dt){
     updateItems(dt);updateLoose(dt);updateScanners(dt);
   }
   A=CURI;
-  market(dt);tutStep(dt);
+  market(dt);tutStep(dt);bankTick(dt);
 
   M.ph+=dt*2.1;
   M.blink-=dt;if(M.blink<-2.5)M.blink=0.12;
@@ -2997,6 +3252,10 @@ function render(){
     if(carrying!=='lord')list.push({wy:LORD.wy,wx:LORD.wx,k:'lord'});
   }
   if(CURI.npc&&CURI.npcSpot)list.push({wy:CURI.npcSpot.wy,wx:CURI.npcSpot.wx,k:'npcc'});
+  if(CURI.builds)for(var tb=0;tb<CURI.builds.length;tb++){var bb=CURI.builds[tb];
+    list.push({wy:bb.wy,wx:bb.wx,k:'build',o:bb});}
+  if(CURI.folk)for(var tf=0;tf<CURI.folk.length;tf++){var ff=CURI.folk[tf];
+    list.push({wy:ff.wy,wx:ff.wx,k:'folk',o:ff});}
   if(CURI.home&&VOLT&&carrying!=='volt')list.push({wy:VOLT.wy,wx:VOLT.wx,k:'volt'});
   if(CURI.emp&&carrying!=='emp')list.push({wy:CURI.emp.wy,wx:CURI.emp.wx,k:'emp',o:CURI.emp});
   for(var pl=0;pl<A.palms.length;pl++)list.push({wy:cy(A.palms[pl].y)+TS-4,wx:cx(A.palms[pl].x)+TS/2,k:'palm',o:A.palms[pl]});
@@ -3025,6 +3284,8 @@ function render(){
     else if(e3.k==='parrot')drawParrot();
     else if(e3.k==='lord')drawLord();
     else if(e3.k==='npcc')drawNpcCritter(CURI.npc);
+    else if(e3.k==='build')drawTownBuilding(e3.o);
+    else if(e3.k==='folk')drawFolk(e3.o);
     else if(e3.k==='volt')drawVolt();
     else if(e3.k==='emp')drawEmployee(e3.o);
     else if(e3.k==='palm')drawPalm(e3.o);
@@ -3061,6 +3322,7 @@ function render(){
   if(S.parrot)drawParrotPanel();
   if(S.land)drawLordPanel();
   if(S.shop)drawShop();
+  if(S.bankOpen)drawBank();
   if(S.power)drawPower();
   if(S.confirm)drawConfirm();
   requestAnimationFrame(render);
