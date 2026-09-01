@@ -93,14 +93,17 @@ function freeW(g){return g?(g.t==='lgen'?30:15):0;}
 function billedW(I){var g=genOf(I);return Math.max(0,drawOf(I)-freeW(g));}
 function genCap(g){return g.t==='lgen'?900:400;}
 function feedGen(g,kind,n){
-  var v=(FUEL_OF[kind]||1)*(n||1);
+  var v=(FUEL_OF[kind]||1)*(n===undefined?1:n);
+  if(!(v>0))return 0;
   g.fuel=Math.min(genCap(g),(g.fuel||0)+v);
   g.feed=1;
   return v;
 }
 function isPowered(I){
   var g=genOf(I);
-  if(!g)return true;                    /* no generator on this island: nothing to pay */
+  /* No generator used to mean "nothing to pay", which let you run an entire
+     island for free by simply picking the generator up. */
+  if(!g)return drawOf(I)<=0;
   return billedW(I)<=0||(g.fuel||0)>0;
 }
 var RECIPES=[['belt',9],['scan',36],['gate',36],['sep',60],['mini',48],['dredge',140],['seller',125],
@@ -507,6 +510,7 @@ function place(t,x,y,dir){
 function structAt(x,y){var c=cell(x,y);return (c&&c.t==='occ')?c.s:null;}
 function removeAt(x,y){
   var c=cell(x,y);if(!c)return false;
+  if(c.t==='occ'&&c.s.t==='seller'&&c.s.brk)return false;   /* repair it, do not dodge it */
   if(c.t==='stall'||c.t==='deco'||c.t==='npc')return false;
   if(c.t==='belt'){setCell(x,y,null);S.stock.belt++;
     A.items=A.items.filter(function(it){return !(it.cx===x&&it.cy===y);});return true;}
@@ -925,11 +929,15 @@ function sepPlan(sp,fromRev){
   if(!outs.length)return sp.lastOut>=0?sp.lastOut:0;
   return outs[sp.k%outs.length];
 }
-var SELLER_COOL=1.1,SELLER_LIMIT=6;
+var SELLER_COOL=1.7,SELLER_LIMIT=6,SELLER_GRACE=8;   /* seconds of safety after a repair */
 function sellerTake(se,kind,nx,ny){
   if(se.brk)return false;
   se.heat=(se.heat||0)+1;
-  if(se.heat>SELLER_LIMIT*(A.stab?2:1)){
+  /* Straight after a repair the whole backed-up line arrives at once, which used
+     to re-jam it within a second or two - you paid 45c for nothing. Give it a
+     grace window to clear the queue and to let you re-plumb the line. */
+  if(se.cool>0)se.heat=Math.min(se.heat,SELLER_LIMIT*(A.stab?2:1));
+  if(se.cool<=0&&se.heat>SELLER_LIMIT*(A.stab?2:1)){
     se.brk=true;se.why='overload';
     S.hint='An auto seller jammed - too much arriving at once! Split the flow with a SEPARATOR';S.hintT=5;
     sparkle(cx(nx)+TS/2,cy(ny)+TS/2,'#ffb347',10);
@@ -1885,6 +1893,12 @@ function drawSeller(d){
     if(hp>0.75){X.globalAlpha=0.4+0.3*Math.sin(T*10);
       txt('!',0,-34,14,'#ff6d6d','center');X.globalAlpha=1;}
   }
+  if(!d.brk&&(d.cool||0)>0){
+    X.globalAlpha=0.35+0.3*Math.sin(T*7);
+    X.strokeStyle=COL.bit;X.lineWidth=3;
+    X.beginPath();X.roundRect(-29,-16,58,38,10);X.stroke();
+    X.globalAlpha=1;
+  }
   if(d.brk){
     txt('X',0,4,20,'#ff6d6d','center');
     if((T*2)%1<0.5){X.globalAlpha=0.5;X.fillStyle='#999';
@@ -1895,7 +1909,9 @@ function drawSeller(d){
   }
   X.fillStyle='#3a3557';rr(-20,18,8,8,3);X.fill();rr(12,18,8,8,3);X.fill();
   X.restore();
-  txt(d.brk?(d.why==='overload'?'JAMMED - click to fix':'BROKEN - click to fix'):'AUTO SELLER',0,18,8,d.brk?'#ff9d9d':'#e8e2ff','center');
+  txt(d.brk?(d.why==='overload'?'JAMMED - click to fix':'BROKEN - click to fix')
+          :((d.cool||0)>0?'CATCHING UP '+Math.ceil(d.cool)+'s':'AUTO SELLER'),
+      0,18,8,d.brk?'#ff9d9d':((d.cool||0)>0?COL.bit2:'#e8e2ff'),'center');
 }
 function drawKiln(d){
   var b=Math.sin(T*1.5+d.x)*1.0,ht=clamp(d.heat2||0,0,1),md=d.made||0;
@@ -4360,9 +4376,13 @@ C.addEventListener('mousedown',function(e){
         beep(620,0.05,'square',0.04);save();return;}
       if(st.t==='seller'&&st.brk){
         if(S.coins<45){S.hint='Repairs cost 45c';S.hintT=2;beep(160,0.1,'sawtooth',0.04);return;}
-        S.coins-=45;st.brk=false;st.dmg=0;st.heat=0;st.why='';st.thr=2+Math.floor(Math.random()*2);
+        var wasJam=st.why==='overload';
+        S.coins-=45;st.brk=false;st.dmg=0;st.heat=0;st.why='';st.cool=SELLER_GRACE;
+        st.thr=2+Math.floor(Math.random()*2);
         pop(cx(st.x)+TS,cy(st.y),'-45c',COL.gold);sparkle(cx(st.x)+TS,cy(st.y)+TS,'#7ce7a2',8);
-        S.hint='Auto seller repaired!';S.hintT=3;beep(760,0.08,'triangle',0.05);save();return;
+        S.hint=wasJam?('Repaired - '+SELLER_GRACE+'s to clear the backlog. Split the line with a SEPARATOR or it will jam again')
+                     :'Auto seller repaired!';
+        S.hintT=wasJam?7:3;beep(760,0.08,'triangle',0.05);save();return;
       }
     }
   }
@@ -4476,6 +4496,7 @@ function ensureGenerators(){
       if(canPlace('gen',VOLT.gen.x,VOLT.gen.y))g=place('gen',VOLT.gen.x,VOLT.gen.y,0);
       for(var y=1;y<GH-3&&!g;y++)for(var x=1;x<GW-2&&!g;x++)
         if(canPlace('gen',x,y))g=place('gen',x,y,0);
+      if(!g)S.stock.gen=(S.stock.gen||0)+1;   /* nowhere to put it - you site it yourself */
       if(g){
         g.fuel=(g.fuel===undefined?150:g.fuel);
         VOLT.gen=g;
@@ -4497,7 +4518,7 @@ function ensureGenerators(){
     var lg=null;
     for(var y2=1;y2<GH-3&&!lg;y2++)for(var x2=1;x2<GW-2&&!lg;x2++)
       if(canPlace('lgen',x2,y2))lg=place('lgen',x2,y2,0);
-    if(!lg)continue;
+    if(!lg){S.stock.lgen=(S.stock.lgen||0)+1;continue;}
     if(!I.emp){
       var emp=EMPLOYEES[i%EMPLOYEES.length];
       I.emp={name:emp.name,c1:emp.c1,c2:emp.c2,x:lg.x,y:lg.y+sizeH('lgen'),
@@ -4828,7 +4849,10 @@ function simulate(dt){
     }
     A.powered=A.owned?isPowered(A):true;
     if(!A.powered){
-      if(A===CURI&&S.hintT<=0){S.hint='No power! Feed bits to the generator';S.hintT=2;}
+      if(A===CURI&&S.hintT<=0){
+        S.hint=genOf(A)?'No power! Feed bits to the generator'
+                       :'No generator on this island - place one from your inventory';
+        S.hintT=2;}
       continue;                        /* the whole island idles until it is fed */
     }
     for(var i=0;i<A.structs.length;i++){var s=A.structs[i];
@@ -4840,7 +4864,9 @@ function simulate(dt){
         s.tm+=dt;s.spin+=dt*2.6;
         if(s.tm>cad){s.tm=0;produce(s);}
         s.pop=Math.max(0,s.pop-dt*3);s.puff=Math.max(0,s.puff-dt*1.2);}
-      else if(s.t==='seller'){s.lid=Math.max(0,s.lid-dt*3);s.heat=Math.max(0,(s.heat||0)-dt*SELLER_COOL*(A.stab?2:1));}
+      else if(s.t==='seller'){s.lid=Math.max(0,s.lid-dt*3);
+        s.cool=Math.max(0,(s.cool||0)-dt);
+        s.heat=Math.max(0,(s.heat||0)-dt*SELLER_COOL*(A.stab?2:1)*(s.cool>0?2.5:1));}
       else if(s.t==='sep')s.pulse=Math.max(0,(s.pulse||0)-dt*3);
     else if(s.t==='comp')s.press=Math.max(0,(s.press||0)-dt*2);
       else if(s.t==='craft')s.made=Math.max(0,(s.made||0)-dt*1.5);
