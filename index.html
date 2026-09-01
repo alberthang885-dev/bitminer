@@ -511,6 +511,14 @@ function removeAt(x,y){
   if(c.t==='belt'){setCell(x,y,null);S.stock.belt++;
     A.items=A.items.filter(function(it){return !(it.cx===x&&it.cy===y);});return true;}
   var s=c.s,wN=sizeW(s.t),hN=sizeH(s.t);
+  if(s.buf&&s.buf.length){                 /* whatever it was holding falls out */
+    var bx0=cx(s.x)+TS*wN/2,by0=cy(s.y)+TS*hN/2;
+    for(var bi3=0;bi3<s.buf.length&&A.loose.length<70;bi3++){
+      A.loose.push({x0:bx0,y0:by0,x1:bx0+(Math.random()*30-15),y1:by0+(Math.random()*24-12),
+        t:0,dur:0.5,land:false,bob:Math.random()*6,x:bx0,y:by0,z:0,kind:s.buf[bi3]});
+    }
+    s.buf=null;
+  }
   for(var j=0;j<hN;j++)for(var i2=0;i2<wN;i2++)setCell(s.x+i2,s.y+j,null);
   A.structs.splice(A.structs.indexOf(s),1);S.stock[s.t]++;
   if(s.t==='gate')A.structs.forEach(function(o){if(o.t==='scan')o.gates=o.gates.filter(function(g){return !(g[0]===s.x&&g[1]===s.y);});});
@@ -781,9 +789,17 @@ function outlets(m){var o=[],wN=sizeW(m.t),hN=sizeH(m.t),i;
   for(i=0;i<wN;i++){o.push([m.x+i,m.y-1,0,-1]);o.push([m.x+i,m.y+hN,0,1]);}
   for(i=0;i<hN;i++){o.push([m.x-1,m.y+i,-1,0]);o.push([m.x+wN,m.y+i,1,0]);}
   return o;}
+var TILE_CAP=2;     /* how many items one belt square will hold */
 function beltFree(x,y,p){
+  var n=0;
   for(var i=0;i<A.items.length;i++){var it=A.items[i];
-    if(it.cx===x&&it.cy===y&&Math.abs(it.p-p)<0.34)return false;} return true;}
+    if(it.cx!==x||it.cy!==y)continue;
+    if(Math.abs(it.p-p)<0.34)return false;
+    /* a stopped item parks at p=1, far from the entry point, so the proximity
+       test alone let a blocked square swallow items for ever */
+    if(++n>=TILE_CAP)return false;
+  }
+  return true;}
 function mineKind(t,big){
   var r=Math.random(),rich=A.rich;
   if(t==='miner')return r<0.07?'anom':(r<0.14?'large':'bit');   /* still the rare large drop */
@@ -808,17 +824,55 @@ function mineKind(t,big){
   if(r<0.62)return 'anom';
   return 'mini';
 }
+var OUT_BUF=8;      /* how much a machine will hold back while its belt is busy */
+/* Sort a machine's neighbours into: belts with room right now, belts that exist
+   but are momentarily occupied, and bare ground. */
+function outletScan(m){
+  var o=outlets(m),res={free:[],lane:[],spots:[],all:o};
+  for(var i=0;i<o.length;i++){
+    var q=o[i],c=cell(q[0],q[1]),takes=false;
+    if(c&&c.t==='occ'&&(c.s.t==='sep'||c.s.t==='gen'||c.s.t==='lgen'))takes=true;
+    else if(c&&c.t==='belt'&&!(DX[c.dir]===-q[2]&&DY[c.dir]===-q[3]))takes=true;
+    if(takes){
+      res.lane.push(q);
+      if(beltFree(q[0],q[1],0.2))res.free.push(q);
+    }
+    else if(inGrid(q[0],q[1])&&!c)res.spots.push(q);
+  }
+  return res;
+}
+/* put one item straight onto a belt; false if every lane is busy this instant */
+function emitNow(m,kind,sc){
+  sc=sc||outletScan(m);
+  if(!sc.free.length)return false;
+  var b=sc.free[(m.k++)%sc.free.length];
+  A.items.push({cx:b[0],cy:b[1],p:0.15,kind:kind});
+  sparkle(cx(b[0])+TS/2,cy(b[1])+TS/2,kind==='sup'?COL.sup:COL.bit,4);
+  return true;
+}
+/* drain whatever a machine was holding, as soon as a gap comes past */
+function flushOut(m){
+  if(!m.buf||!m.buf.length)return;
+  var sc=outletScan(m),guard=0;
+  while(m.buf.length&&sc.free.length&&guard++<8){
+    if(!emitNow(m,m.buf[0],sc))break;
+    m.buf.shift();
+    sc=outletScan(m);
+  }
+}
 function emit(m,kind){
-  var o=outlets(m),belts=[],spots=[];
-  for(var i=0;i<o.length;i++){var q=o[i],c=cell(q[0],q[1]);
-    if(c&&c.t==='occ'&&(c.s.t==='sep'||c.s.t==='gen'||c.s.t==='lgen')&&beltFree(q[0],q[1],0.2))belts.push(q);
-    else if(c&&c.t==='belt'&&!(DX[c.dir]===-q[2]&&DY[c.dir]===-q[3])&&beltFree(q[0],q[1],0.2))belts.push(q);
-    else if(inGrid(q[0],q[1])&&!c)spots.push(q);}
+  var sc=outletScan(m);
+  if(emitNow(m,kind,sc))return;
+  /* A belt IS there, it is just occupied for a moment. Hold the item back and
+     drop it in when a gap arrives - miners used to fling it on the floor here,
+     which on a busy line meant losing a fifth of everything they dug. */
+  if(sc.lane.length){
+    if(!m.buf)m.buf=[];
+    if(m.buf.length<OUT_BUF){m.buf.push(kind);return;}
+  }
   var mx=cx(m.x)+TS*sizeW(m.t)/2,my=cy(m.y)+TS*sizeH(m.t)/2;
-  if(belts.length){var b=belts[(m.k++)%belts.length];
-    A.items.push({cx:b[0],cy:b[1],p:0.15,kind:kind});
-    sparkle(cx(b[0])+TS/2,cy(b[1])+TS/2,kind==='sup'?COL.sup:COL.bit,4);return;}
-  var t=spots.length?spots[Math.floor(Math.random()*spots.length)]:o[Math.floor(Math.random()*o.length)];
+  var t=sc.spots.length?sc.spots[Math.floor(Math.random()*sc.spots.length)]
+                       :sc.all[Math.floor(Math.random()*sc.all.length)];
   if(A.loose.length<70)A.loose.push({x0:mx,y0:my,
     x1:cx(t[0])+TS/2+(Math.random()*10-5),y1:cy(t[1])+TS/2+(Math.random()*10-5),
     t:0,dur:0.55,land:false,bob:Math.random()*6,x:mx,y:my,z:0,kind:kind});
@@ -4778,6 +4832,7 @@ function simulate(dt){
       continue;                        /* the whole island idles until it is fed */
     }
     for(var i=0;i<A.structs.length;i++){var s=A.structs[i];
+      if(s.buf&&s.buf.length)flushOut(s);
       if(isMiner(s.t)){
         var cad=CADENCE[s.t];
         if(s.big&&canSwitch(s.t))cad*=(s.t==='lgminer'?3.2:3.0);   /* large mode: chunkier, slower */
