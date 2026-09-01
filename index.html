@@ -56,7 +56,7 @@ var TERRAIN={belt:'both',scan:'both',gate:'both',sep:'both',gw:'both',crab:'land
   miner:'land',mini:'land',sup:'land',ult:'land',seller:'land',comp:'land',craft:'land',kiln:'land',dyson:'land',
   lgminer:'land',lgsup:'land',lgult:'land',
   aqua:'water',dredge:'water'};
-var PRICES={belt:25,mini:150,miner:600,seller:400,scan:120,gate:120,sep:200,gen:0,lgen:0,comp:900,craft:1200,kiln:5000,sup:9000,gw:15000,aqua:1400,dredge:450,crab:1500,ult:30000,dyson:0,
+var PRICES={belt:25,mini:150,miner:480,seller:400,scan:120,gate:120,sep:200,gen:0,lgen:0,comp:900,craft:1200,kiln:5000,sup:9000,gw:15000,aqua:1400,dredge:450,crab:1500,ult:30000,dyson:0,
   lgminer:4200,lgsup:26000,lgult:88000};
 function sizeOf(t){return SIZES[t]||1;}
 /* only the LARGE miners can switch between chunky and quick */
@@ -3115,7 +3115,7 @@ function sellTyped(){
   sell(Math.min(n,S.bag[S.cur]));S.amt='';
 }
 function shopRows(){
-  var rows=[['CONVEYOR',25,'belt'],['MINI MINER',150,'mini'],['BITMINER',600,'miner'],
+  var rows=[['CONVEYOR',25,'belt'],['MINI MINER',150,'mini'],['BITMINER',480,'miner'],
             ['AUTO SELLER',400,'seller'],['SCANNER',120,'scan'],['REDIRECTOR',120,'gate'],
             ['SEPARATOR',200,'sep'],['DREDGER',450,'dredge'],['AQUA MINER',1400,'aqua'],
             ['COMPRESSOR',900,'comp'],['CRAFTER',1200,'craft']];
