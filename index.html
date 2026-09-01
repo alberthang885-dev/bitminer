@@ -4594,6 +4594,7 @@ function startGame(){
 
 /* ---------- the CRT pass: curvature, bloom, scanlines, grain ---------- */
 var GLC=null,GL=null,crtProg=null,crtTex=null,crtU={},crtDead=false;
+var CRT_GAIN=0.5;      /* the whole filter, at half strength */
 var CRT_VS='attribute vec2 p;varying vec2 vUv;'+
   'void main(){vUv=p*0.5+0.5;gl_Position=vec4(p,0.0,1.0);}';
 var CRT_FS=[
@@ -4708,7 +4709,7 @@ function crtDraw(){
     GL.texImage2D(GL.TEXTURE_2D,0,GL.RGBA,GL.RGBA,GL.UNSIGNED_BYTE,C);
     GL.useProgram(crtProg);
     GL.uniform1f(crtU.time,T);
-    GL.uniform1f(crtU.amt,clamp(S.crtAmt===undefined?1:S.crtAmt,0,1));
+    GL.uniform1f(crtU.amt,clamp(S.crtAmt===undefined?1:S.crtAmt,0,1)*CRT_GAIN);
     GL.drawArrays(GL.TRIANGLES,0,3);
   }catch(e){crtOff();}
 }
