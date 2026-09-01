@@ -517,6 +517,12 @@ function removeAt(x,y){
   if(S.scfg===s)S.scfg=null;
   if(S.ccfg===s)S.ccfg=null;
   A.items=A.items.filter(function(it){return !(it.cx>=s.x&&it.cx<s.x+wN&&it.cy>=s.y&&it.cy<s.y+hN);});
+  if(s.t==='gate'){                      /* drop tags aimed at a redirector that is gone */
+    for(var mi2=0;mi2<A.items.length;mi2++){
+      var mk2=A.items[mi2].mk;if(!mk2)continue;
+      var at=mk2.indexOf(s);if(at>=0)mk2.splice(at,1);
+    }
+  }
   return true;}
 
 /* ---------- palms ---------- */
@@ -833,7 +839,7 @@ function produce(m){
 function beltInfo(x,y){
   var c=cell(x,y);if(!c)return null;
   if(c.t==='belt')return {dir:c.dir};
-  if(c.t==='occ'&&c.s.t==='gate')return {dir:(c.s.armed?c.s.rdir:c.s.dir),g:c.s};
+  if(c.t==='occ'&&c.s.t==='gate')return {dir:c.s.dir,g:c.s};
   if(c.t==='occ'&&c.s.t==='sep')return {dir:sepPlan(c.s,-1),sep:c.s};
   return null;
 }
@@ -845,7 +851,7 @@ function acceptsFrom(x,y,d){
   if(c.t==='occ'){
     var k=c.s.t;
     if(k==='sep')return true;
-    if(k==='gate')return (c.s.armed?c.s.rdir:c.s.dir)!==((d+2)%4);
+    if(k==='gate')return c.s.dir!==((d+2)%4)||c.s.rdir!==((d+2)%4);
     return k==='seller'||k==='comp'||k==='craft'||k==='kiln'||k==='gw'||k==='gen'||k==='lgen';
   }
   return false;
@@ -924,7 +930,12 @@ function updateItems(dt){
     }
     it.p+=sp*dt;
     if(it.p>=1){
-      if(bi.g&&bi.g.armed){bi.g.armed=false;bi.g.flash=1;}   /* one item per signal */
+      /* a redirector only ever sends the item the scanner picked out */
+      var useDir=bi.dir;
+      if(bi.g){
+        var mi=it.mk?it.mk.indexOf(bi.g):-1;
+        if(mi>=0){useDir=bi.g.rdir;bi.g.flash=1;it.mk.splice(mi,1);}
+      }
       if(bi.sep){
         /* NB: do not name anything 'sp' here - that is the belt speed in this scope */
         var sepS=bi.sep,rev=(it.from===undefined)?-1:((it.from+2)%4);
@@ -945,8 +956,8 @@ function updateItems(dt){
         if(!moved)it.p=1;
         continue;
       }
-      var nx=it.cx+DX[bi.dir],ny=it.cy+DY[bi.dir],nb=beltInfo(nx,ny),nc=cell(nx,ny);
-      if(nb){ if(beltFree(nx,ny,0)){it.cx=nx;it.cy=ny;it.p-=1;it.from=bi.dir;} else it.p=1; }
+      var nx=it.cx+DX[useDir],ny=it.cy+DY[useDir],nb=beltInfo(nx,ny),nc=cell(nx,ny);
+      if(nb){ if(beltFree(nx,ny,0)){it.cx=nx;it.cy=ny;it.p-=1;it.from=useDir;} else it.p=1; }
       else if(nc&&nc.t==='occ'&&nc.s.t==='seller'){
         if(sellerTake(nc.s,it.kind,nx,ny))A.items.splice(i,1);
         else it.p=1;
@@ -1005,7 +1016,7 @@ function updateItems(dt){
       else{
         A.items.splice(i,1);
         if(A.loose.length<70){var lx=cx(it.cx)+TS/2,ly=cy(it.cy)+TS/2;
-          A.loose.push({x0:lx,y0:ly,x1:lx+DX[bi.dir]*18,y1:ly+DY[bi.dir]*18,t:0,dur:0.35,
+          A.loose.push({x0:lx,y0:ly,x1:lx+DX[useDir]*18,y1:ly+DY[useDir]*18,t:0,dur:0.35,
             land:false,bob:0,x:lx,y:ly,z:0,kind:it.kind});}
       }
     }
@@ -1023,29 +1034,42 @@ function updateLoose(dt){
   }
 }
 function kindMatch(filt,k){return filt==='any'||filt===k;}
+/* Tag the exact item the scanner is looking at, for each redirector it drives.
+   A bare armed flag used to be claimed by whichever item reached the gate first,
+   so on a busy belt the wrong thing got pulled aside - usually a plain bit while
+   the anomaly you were filtering for sailed straight through. */
 function scanDetect(sc){
-  var fx=sc.x+DX[sc.dir],fy=sc.y+DY[sc.dir],i;
-  for(i=0;i<A.items.length;i++){var it=A.items[i];
-    if(it.cx===fx&&it.cy===fy&&kindMatch(sc.filt,it.kind))return true;}
-  for(i=0;i<A.loose.length;i++){var l=A.loose[i];
-    if(l.land&&Math.floor((l.x-OX)/TS)===fx&&Math.floor((l.y-OY)/TS)===fy&&kindMatch(sc.filt,l.kind))return true;}
-  return false;
-}
-function updateScanners(dt){
-  for(var i=0;i<A.structs.length;i++){var sc=A.structs[i];
-    if(sc.t==='scan'){
-      sc.det=scanDetect(sc);
-      if(sc.det&&!sc.wasDet){        /* rising edge: arm the linked redirectors once */
-        for(var g=0;g<sc.gates.length;g++){
-          var gs=structAt(sc.gates[g][0],sc.gates[g][1]);
-          if(gs&&gs.t==='gate')gs.armed=true;
-        }
-      }
-      sc.wasDet=sc.det;
+  var fx=sc.x+DX[sc.dir],fy=sc.y+DY[sc.dir],i,g,gs,found=false;
+  for(i=0;i<A.items.length;i++){
+    var it=A.items[i];
+    if(it.cx!==fx||it.cy!==fy||!kindMatch(sc.filt,it.kind))continue;
+    found=true;
+    for(g=0;g<sc.gates.length;g++){
+      gs=structAt(sc.gates[g][0],sc.gates[g][1]);
+      if(!gs||gs.t!=='gate')continue;
+      if(!it.mk)it.mk=[];
+      if(it.mk.indexOf(gs)<0)it.mk.push(gs);
     }
   }
-  for(var j=0;j<A.structs.length;j++){var gt=A.structs[j];
-    if(gt.t==='gate')gt.flash=Math.max(0,(gt.flash||0)-dt*2);
+  for(i=0;i<A.loose.length;i++){var l=A.loose[i];
+    if(l.land&&Math.floor((l.x-OX)/TS)===fx&&Math.floor((l.y-OY)/TS)===fy&&kindMatch(sc.filt,l.kind))found=true;}
+  return found;
+}
+function updateScanners(dt){
+  var i,j;
+  for(j=0;j<A.structs.length;j++){var g0=A.structs[j];
+    if(g0.t==='gate'){g0.flash=Math.max(0,(g0.flash||0)-dt*2);g0.armed=false;}
+  }
+  /* tag on every tick - a solid stream of items used to give one rising edge
+     and then nothing, so only the first item of a run was ever redirected */
+  for(i=0;i<A.structs.length;i++){var sc=A.structs[i];
+    if(sc.t==='scan'){sc.det=scanDetect(sc);sc.wasDet=sc.det;}
+  }
+  /* a redirector reads as armed while something is on its way to it */
+  for(i=0;i<A.items.length;i++){
+    var mk=A.items[i].mk;
+    if(!mk)continue;
+    for(j=0;j<mk.length;j++)mk[j].armed=true;
   }
 }
 
@@ -4775,7 +4799,7 @@ function simulate(dt){
         }
       }
     }
-    updateItems(dt);updateLoose(dt);updateScanners(dt);
+    updateScanners(dt);updateItems(dt);updateLoose(dt);
   }
   A=CURI;
   if(S.fuse){S.fuse.t+=dt;if(S.fuse.t>3.5){S.fuse=null;chaChing(true);}}
