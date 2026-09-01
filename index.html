@@ -110,6 +110,107 @@ var RECIPES=[['belt',9],['scan',36],['gate',36],['sep',60],['mini',48],['dredge'
              ['miner',200],['aqua',440],['comp',290],['craft',380],['kiln',900]];
 var KILN_COST=12;          /* bit-value that bakes down into one tranquil ore */
 
+/* ---------- the Portside order book ---------- */
+var ORDER_SLOTS=3, ORDER_REJECT=100;
+var ORDER_KINDS=['mini','bit','shell','large','pearl','sup','lsup','ultra','lultra','tranq'];
+function orderPool(){
+  var pool=[];
+  for(var i=0;i<ORDER_KINDS.length;i++){
+    var k=ORDER_KINDS[i];
+    if(k==='tranq'){if(S.sawWork)pool.push(k);continue;}
+    if(S.unlocked[k])pool.push(k);
+  }
+  if(!pool.length)pool=['bit'];
+  return pool;
+}
+function orderPayRate(){return Math.min(2.4,1.7+(S.rep||0)*0.02);}
+/* one order asks for a kind you can actually make, in a quantity that scales
+   with your reputation, and pays noticeably better than the stall would */
+function makeOrder(){
+  var pool=orderPool();
+  var kind=pool[Math.floor(Math.random()*pool.length)];
+  var unit=(kind==='tranq')?12:(MULT[kind]||1);
+  var target=(55+(S.rep||0)*26)*(0.75+Math.random()*0.6);
+  var need=clamp(Math.round(target/unit),3,500);
+  var pay=Math.max(40,Math.round(need*unit*7.5*orderPayRate()));
+  var pts=Math.max(5,Math.round(need*(PTS[kind]||2)*0.7));
+  return {k:kind,need:need,pay:pay,pts:pts};
+}
+function refillOrders(){
+  if(!S.orders)S.orders=[];
+  while(S.orders.length<ORDER_SLOTS)S.orders.push(makeOrder());
+}
+function orderHave(o){return (S.bag[o.k]||0);}
+function deliverOrder(i){
+  var o=S.orders[i];if(!o)return;
+  if(orderHave(o)<o.need){
+    S.hint='You need '+(o.need-orderHave(o))+' more '+KINDNAME[o.k].toLowerCase();S.hintT=3;
+    beep(160,0.1,'sawtooth',0.04);return;
+  }
+  S.bag[o.k]-=o.need;
+  S.coins+=o.pay;S.pts+=o.pts;S.rep=(S.rep||0)+1;S.filled=(S.filled||0)+1;
+  S.hint='Order filled! +'+o.pay+'c and '+o.pts+' pts  (reputation '+S.rep+')';S.hintT=5;
+  pop(W/2,H/2-30,'+'+o.pay+'c',COL.gold);
+  S.orders[i]=makeOrder();
+  chaChing(true);save();
+}
+function rejectOrder(i){
+  if(!S.orders[i])return;
+  if(S.coins<ORDER_REJECT){S.hint='Turning an order down costs '+ORDER_REJECT+'c';S.hintT=3;
+    beep(160,0.1,'sawtooth',0.04);return;}
+  S.coins-=ORDER_REJECT;S.orders[i]=makeOrder();
+  S.hint='Order turned down - a new one goes up on the board';S.hintT=3;
+  beep(320,0.08,'square',0.045);save();
+}
+var OBW=482,OBH=396,OBX=(W-OBW)/2,OBY=(H-OBH)/2;
+var orderBtns=[];
+function drawOrders(){
+  refillOrders();
+  X.fillStyle='rgba(20,17,40,.62)';X.fillRect(0,0,W,H);
+  var px=OBX,py=OBY,i;
+  rr(px,py,OBW,OBH,16);fill('#211e39');line(COL.wood,4);
+  X.save();X.beginPath();X.roundRect(px,py,OBW,OBH,16);X.clip();
+  X.fillStyle=COL.wood;X.fillRect(px,py,OBW,42);X.restore();
+  txt('PORTSIDE ORDER BOOK',px+52,py+22,13,'#3a2410');
+  X.save();X.translate(px+28,py+22);
+  rr(-11,-10,22,20,3);fill(COL.cream);line('#3a2410',2);
+  X.strokeStyle='#8a5c2c';X.lineWidth=1.4;
+  for(i=0;i<3;i++){X.beginPath();X.moveTo(-7,-4+i*5);X.lineTo(7,-4+i*5);X.stroke();}
+  X.restore();
+  txt(S.coins+'c',px+OBW-48,py+22,12,'#3a2410','right');
+  orderBtns=[];
+  rr(px+14,py+48,OBW-28,24,7);fill('#191730');line('#2e2b50',2);
+  txt('reputation '+(S.rep||0)+'  -  '+(S.filled||0)+' orders filled  -  paying '+
+      Math.round(orderPayRate()*100)+'% of value',px+26,py+61,9,'#8d88b5');
+  var rowH=100;
+  for(i=0;i<S.orders.length;i++){
+    var o=S.orders[i],have=orderHave(o),ready=have>=o.need,yy=py+80+i*rowH;
+    rr(px+14,yy,OBW-28,rowH-10,10);fill('#191730');line(ready?'#6bf28a':'#2e2b50',ready?2.5:2);
+    X.save();X.translate(px+42,yy+30);drawBit(0,0,1.5,true,o.k);X.restore();
+    txt(o.need+' x '+KINDNAME[o.k],px+70,yy+22,12,ready?COL.cream:'#b9b3d8');
+    /* progress bar */
+    var frac=clamp(have/o.need,0,1);
+    rr(px+70,yy+32,220,9,4);fill('#0f0e1c');
+    if(frac>0){rr(px+70,yy+32,220*frac,9,4);fill(ready?'#6bf28a':COL.bit);}
+    txt('you have '+have+' of '+o.need,px+70,yy+56,9,ready?'#6bf28a':'#8d88b5','left',false);
+    txt(o.pay+'c',px+OBW-30,yy+24,13,COL.gold,'right');
+    txt('+'+o.pts+' pts',px+OBW-30,yy+42,9,'#c9a6ff','right',false);
+    (function(idx,rd,ty){
+      rr(px+OBW-140,ty+56,104,28,8);fill(rd?'#3d6b45':'#2f2c4e');line(rd?'#6bf28a':'#2e2b50',2.2);
+      txt(rd?'DELIVER':'not yet',px+OBW-88,ty+70,10,rd?COL.cream:'#6a6590','center');
+      if(rd)orderBtns.push({x:px+OBW-140,y:ty+56,w:104,h:28,f:function(){deliverOrder(idx);}});
+      rr(px+70,ty+66,86,20,6);fill('#2f2c4e');line('#2e2b50',1.8);
+      txt('turn down -'+ORDER_REJECT+'c',px+113,ty+77,8,'#8d88b5','center',false);
+      orderBtns.push({x:px+70,y:ty+66,w:86,h:20,f:function(){rejectOrder(idx);}});
+    })(i,ready,yy);
+  }
+  txt('"Fill them and the board trusts you with bigger jobs." - the clerk',
+      px+OBW/2,py+OBH-16,8,'#6a6590','center',false);
+  rr(px+OBW-38,py+8,26,24,7);fill('#8a5c2c');line('#3a2410',2.5);
+  txt('X',px+OBW-25,py+20,12,COL.cream,'center');
+  orderBtns.unshift({x:px+OBW-42,y:py+4,w:34,h:32,f:function(){S.orderOpen=false;}});
+}
+
 /* ---------- Ferro's workshop, up in Portside ---------- */
 var WORKS=[
  {k:'kiln',name:'TRANQUIL KILN',type:'machine',coins:5000,mats:{bit:150},
@@ -477,6 +578,7 @@ var S={bag:{mini:0,bit:0,large:0,sup:0,anom:0,shell:0,pearl:0,ultra:0,lsup:0,lul
   renIdx:-1,renTxt:'',
   bank:{bal:0,pend:0,earned:0},bankTxt:'',bankFocus:false,bankOpen:false,loreAt:null,
   work:false,wscroll:0,wscrollMax:0,dyP:null,sawWork:false,crt:true,crtAmt:1,
+  orders:[],rep:0,filled:0,orderOpen:false,
   sold:0,mined:0,tut:0,tutT:0,didPickup:false,sawParrot:false,sawLand:false,pops:[],spark:[],
   hint:'Visit the mantis stall to trade',hintT:6};
 
@@ -3127,7 +3229,7 @@ function drawHud(){
   X.beginPath();X.moveTo(-9,0);X.lineTo(6,0);X.moveTo(0,-5);X.lineTo(6,0);X.lineTo(0,5);X.stroke();X.restore();
   txt('arrows',dxp,by+53,7,'#6a6590','center',false);
   txt('mined '+S.mined+'   sold '+S.sold+'   '+S.pts+' pts   '+ISLES.length+' island'+(ISLES.length>1?'s':''),430,by+18,9,'#8d88b5','left',false);
-  txt('E stall  I inventory  [ ] switch island  right-click picks up',430,by+34,9,'#6a6590','left',false);
+  txt('E stall  I inventory  [ ] switch island  -  drag to lay a run of belts',430,by+34,9,'#6a6590','left',false);
   if(S.newsT>0){
     X.globalAlpha=clamp(S.newsT,0,1);
     txt(S.news,430,by+50,9,COL.pink,'left',false);X.globalAlpha=1;
@@ -3615,7 +3717,7 @@ function drawScfg(){
 var crabBtns=[];
 function drawCrabP(){
   var cb=S.crabP;if(!cb)return;
-  var pw=250,ph=214,px=clamp(cx(cb.x)+TS-pw/2,10,W-pw-10),py=cy(cb.y)+TS*2+10;
+  var pw=250,ph=252,px=clamp(cx(cb.x)+TS-pw/2,10,W-pw-10),py=cy(cb.y)+TS*2+10;
   if(py+ph>H-BOT-6)py=cy(cb.y)-ph-14;
   rr(px,py,pw,ph,12);fill('#3d2413');line('#ff6a3d',3);
   txt(cb.emp?'ISLAND STAFF':'CONCIERGE CRAB',px+14,py+18,12,'#ffb08a');
@@ -3624,7 +3726,8 @@ function drawCrabP(){
   var rows=[['TRADE - the mantis desk',function(){S.crabP=null;S.shop=true;S.sscroll=0;S.amtFocus=true;}],
             ['PRIZES - the parrot desk',function(){S.crabP=null;S.parrot=true;S.sawParrot=true;}],
             ['ISLANDS - the property desk',function(){S.crabP=null;S.land=true;S.sawLand=true;S.lscroll=0;}],
-            ['POWER - fuel the generator',function(){S.crabP=null;S.power=true;}]];
+            ['POWER - fuel the generator',function(){S.crabP=null;S.power=true;}],
+            ['ORDERS - the Portside board',function(){S.crabP=null;S.orderOpen=true;refillOrders();}]];
   for(var i=0;i<rows.length;i++){
     var ry=py+46+i*38;
     rr(px+14,ry,pw-28,32,8);fill('#5a3820');line('#ff6a3d',2);
@@ -4140,13 +4243,40 @@ function drawCcfg(){
 
 /* ---------- input ---------- */
 var mouse={sx:0,sy:0,gx:-1,gy:-1,in:false};
+var dragBelt=null;      /* {x,y} of the last square a dragged belt was laid on */
 C.addEventListener('mousemove',function(e){
   var r=C.getBoundingClientRect();
   mouse.sx=(e.clientX-r.left)*(C.width/r.width);
   mouse.sy=(e.clientY-r.top)*(C.height/r.height);
   mouse.gx=Math.floor((mouse.sx-OX)/TS);mouse.gy=Math.floor((mouse.sy-OY)/TS);
   mouse.in=mouse.gx>=0&&mouse.gy>=0&&mouse.gx<GW&&mouse.gy<GH&&mouse.sy>OY&&mouse.sy<H-BOT;
+  if(dragBelt&&(e.buttons&1))dragLay();
+  else if(dragBelt&&!(e.buttons&1))dragBelt=null;
 });
+/* Hold the button down and sweep: each new square gets a conveyor, pointing the
+   way you are dragging, so a long run is one gesture instead of twenty clicks. */
+function dragLay(){
+  if(!dragBelt||!mouse.in||S.tool!=='belt')return;
+  if(mouse.gx===dragBelt.x&&mouse.gy===dragBelt.y)return;
+  var dx=mouse.gx-dragBelt.x,dy=mouse.gy-dragBelt.y;
+  if(Math.abs(dx)+Math.abs(dy)!==1)dragBelt={x:mouse.gx,y:mouse.gy};   /* jumped a gap */
+  else {
+    var d=dx>0?0:dx<0?2:dy>0?1:3;
+    var prev=cell(dragBelt.x,dragBelt.y);
+    if(prev&&prev.t==='belt'&&prev.dir!==d)prev.dir=d;   /* elbow into the new heading */
+    S.dir=d;
+  }
+  if(S.stock.belt<=0){
+    if(S.hintT<=0){S.hint='Out of conveyors';S.hintT=1.5;}
+    dragBelt=null;return;
+  }
+  if(!canPlace('belt',mouse.gx,mouse.gy)){dragBelt={x:mouse.gx,y:mouse.gy};return;}
+  place('belt',mouse.gx,mouse.gy,S.dir);S.stock.belt--;
+  sparkle(cx(mouse.gx)+TS/2,cy(mouse.gy)+TS/2,COL.gold,3);
+  beep(660,0.03,'triangle',0.03);
+  dragBelt={x:mouse.gx,y:mouse.gy};
+  S.didPickup=true;save();
+}
 C.addEventListener('wheel',function(e){
   if(S.shop){S.sscroll=clamp(S.sscroll+e.deltaY*0.5,0,S.sscrollMax);e.preventDefault();}
   else if(S.inv){S.iscroll=clamp(S.iscroll+e.deltaY*0.5,0,S.iscrollMax);e.preventDefault();}
@@ -4238,6 +4368,13 @@ C.addEventListener('mousedown',function(e){
     if(S.fuse.t>1.9){S.fuse=null;chaChing(true);}
     return;
   }
+  dragBelt=null;
+  if(S.orderOpen){
+    for(i=0;i<orderBtns.length;i++){var ob=orderBtns[i];
+      if(mouse.sx>=ob.x&&mouse.sx<=ob.x+ob.w&&mouse.sy>=ob.y&&mouse.sy<=ob.y+ob.h){ob.f();return;}}
+    if(mouse.sx<OBX||mouse.sx>OBX+OBW||mouse.sy<OBY||mouse.sy>OBY+OBH)S.orderOpen=false;
+    return;
+  }
   if(S.work){
     for(i=0;i<workBtns.length;i++){var wb=workBtns[i];
       if(mouse.sx>=wb.x&&mouse.sx<=wb.x+wb.w&&mouse.sy>=wb.y&&mouse.sy<=wb.y+wb.h){wb.f();return;}}
@@ -4320,6 +4457,8 @@ C.addEventListener('mousedown',function(e){
     for(i=0;i<CURI.builds.length;i++){var bb=CURI.builds[i];
       if(mouse.sx>cx(bb.x)&&mouse.sx<cx(bb.x)+bb.w*TS&&mouse.sy>cy(bb.y)-20&&mouse.sy<cy(bb.y)+bb.h*TS){
         if(bb.k==='bank'){S.bankOpen=true;S.bankFocus=true;beep(560,0.08,'triangle',0.05);return;}
+        if(bb.k==='market'){S.orderOpen=true;refillOrders();
+          beep(520,0.07,'square',0.05);setTimeout(function(){beep(660,0.09,'square',0.05);},80);return;}
         if(bb.k==='workshop'){S.work=true;S.wscroll=0;
           if(!S.sawWork){S.sawWork=true;S.hint='Ferro can bake bits into tranquil ore - and much stranger things';S.hintT=5;}
           beep(430,0.09,'square',0.05);setTimeout(function(){beep(330,0.12,'square',0.05);},95);return;}
@@ -4409,7 +4548,10 @@ C.addEventListener('mousedown',function(e){
   place(t2,mouse.gx,mouse.gy,S.dir);S.stock[t2]--;
   sparkle(cx(mouse.gx)+TS/2*sizeW(t2),cy(mouse.gy)+TS/2*sizeH(t2),COL.gold,6);
   beep(700,0.05,'triangle',0.045);save();
+  if(t2==='belt')dragBelt={x:mouse.gx,y:mouse.gy};   /* keep laying while held */
 });
+C.addEventListener('mouseup',function(){dragBelt=null;});
+C.addEventListener('mouseleave',function(){dragBelt=null;});
 function rotateHover(){
   if(S.shop||S.inv||S.parrot||S.land||!mouse.in)return;
   var c=cell(mouse.gx,mouse.gy);
@@ -4450,7 +4592,7 @@ window.addEventListener('keydown',function(e){
   else if(k==='e'||k==='E'){S.shop=!S.shop;S.inv=false;S.parrot=false;S.land=false;S.sscroll=0;S.amtFocus=S.shop;}
   else if(k==='['){gotoIsle((S.isle-1+ISLES.length)%ISLES.length);}
   else if(k===']'){gotoIsle((S.isle+1)%ISLES.length);}
-  else if(k==='Escape'){if(S.fuse&&S.fuse.t>1.9)S.fuse=null;if(S.moveNpc)npcCancelMove();S.shop=false;S.inv=false;S.parrot=false;S.land=false;S.power=false;S.bankOpen=false;S.work=false;S.dyP=null;S.scfg=null;S.ccfg=null;S.crabP=null;S.lore=null;S.confirm=null;S.linking=null;S.amtFocus=false;}
+  else if(k==='Escape'){if(S.fuse&&S.fuse.t>1.9)S.fuse=null;if(S.moveNpc)npcCancelMove();S.shop=false;S.inv=false;S.parrot=false;S.land=false;S.power=false;S.bankOpen=false;S.work=false;S.orderOpen=false;S.dyP=null;S.scfg=null;S.ccfg=null;S.crabP=null;S.lore=null;S.confirm=null;S.linking=null;S.amtFocus=false;}
   else if(k==='r'||k==='R'){S.dir=(S.dir+1)%4;rotateHover();}
   else if(k==='f'||k==='F'){crtToggle();}
   else if(k.indexOf('Arrow')===0){
@@ -4483,7 +4625,8 @@ function save(){
       return {cat:I.cat,name:I.name,emp:I.emp||null,b:belts,s:st,p:I.palms.map(function(a){return [a.x,a.y];})};
     });
     localStorage.setItem('bitminer7',JSON.stringify({isles:isles,isle:S.isle,
-      bag:S.bag,parts:S.parts,sawWork:S.sawWork?1:0,crt:S.crt?1:0,crtA:S.crtAmt,unl:S.unlocked,cur:S.cur,coins:S.coins,stock:S.stock,price:S.price,hist:S.hist,
+      bag:S.bag,parts:S.parts,sawWork:S.sawWork?1:0,crt:S.crt?1:0,crtA:S.crtAmt,
+      ord:S.orders,rep:S.rep,fil:S.filled,unl:S.unlocked,cur:S.cur,coins:S.coins,stock:S.stock,price:S.price,hist:S.hist,
       mined:S.mined,sold:S.sold,bank:S.bank,pts:S.pts,rew:S.rew,supU:S.supUnlocked,gwU:S.gwUnlocked,ulU:S.ultraUnlocked,tut:S.tut,tfl:[S.didPickup?1:0,S.sawParrot?1:0,S.sawLand?1:0],npcs:{stall:[STALL.x,STALL.y],parrot:[PARROT.x,PARROT.y],lord:[LORD.x,LORD.y],volt:VOLT?[VOLT.x,VOLT.y]:null}}));
   }catch(e){}
 }
@@ -4589,6 +4732,9 @@ function load(){
     if(d.parts)S.parts=d.parts;
     PARTKEYS.forEach(function(pk){if(S.parts[pk]===undefined)S.parts[pk]=0;});
     S.sawWork=!!d.sawWork;
+    S.rep=d.rep||0;S.filled=d.fil||0;
+    S.orders=(d.ord&&d.ord.length)?d.ord.filter(function(o){return o&&o.k&&o.need>0;}):[];
+    refillOrders();
     if(d.crt!==undefined)S.crt=!!d.crt;
     if(d.crtA!==undefined)S.crtAmt=clamp(d.crtA,0.2,1);
     S.unlocked=d.unl||S.unlocked;S.cur=d.cur||'bit';
@@ -5031,6 +5177,7 @@ function render(){
   if(S.land)drawLordPanel();
   if(S.shop)drawShop();
   if(S.bankOpen)drawBank();
+  if(S.orderOpen)drawOrders();
   if(S.work)drawWorkshop();
   if(S.dyP)drawDysonPanel();
   if(S.fuse)drawFusion();
