@@ -13,12 +13,12 @@
 </style>
 </head>
 <body>
-<div id="wrap"><canvas id="c" width="840" height="596"></canvas></div>
+<div id="wrap"><canvas id="c" width="792" height="564"></canvas></div>
 <script>
 "use strict";
 var C=document.getElementById('c'),X=C.getContext('2d');
-var W=840,H=596;
-var TS=24,GW=34,GH=20,OX=12,OY=44;
+var W=792,H=564;
+var TS=32,GW=24,GH=14,OX=12,OY=44;
 var SPR=TS/32;
 var BOT=72;
 var DX=[1,0,-1,0],DY=[0,1,0,-1];
@@ -357,7 +357,7 @@ function genTown(){
   var back=A;A=I;
   I.builds=[];I.folk=[];
   /* lay the buildings out around the middle of the island */
-  var spots=[[6,4],[19,15],[14,3],[26,4],[5,9],[10,13],[17,15],[21,9],[27,13],[24,16],[13,8],[30,9],[19,4]];
+  var spots=[[4,3],[13,10],[10,2],[18,3],[3,6],[7,9],[12,10],[15,6],[19,9],[17,11],[9,6],[21,6],[13,3]];
   for(var i=0;i<TOWNBUILD.length;i++){
     var b=TOWNBUILD[i],sp=spots[i%spots.length],put=null;
     for(var r=0;r<9&&!put;r++)for(var yy=sp[1]-r;yy<=sp[1]+r&&!put;yy++)for(var xx=sp[0]-r;xx<=sp[0]+r;xx++){
@@ -3000,12 +3000,9 @@ function drawHud(){
     txt((g.fuel||0).toFixed(0),bx+10,29,9,lit?COL.bit2:'#ff6d6d','left');
   })();
   var up=S.trend>=0;
-  txt(KINDNAME[S.cur],598,13,8,'#8d88b5','right');
-  txt(priceOf(S.cur).toFixed(2)+'c',598,28,13,up?'#6bf28a':'#ff6b6b','right');
-  spark(608,9,104,26);
-  if(S.newsT>0){X.globalAlpha=clamp(S.newsT,0,1);
-    txt(S.news,720,22,9,COL.pink,'left',false);X.globalAlpha=1;}
-  else if(S.hintT>0)txt(S.hint.length>34?S.hint.slice(0,34)+'..':S.hint,720,22,8,'#8d88b5','left',false);
+  txt(KINDNAME[S.cur],W-106,13,8,'#8d88b5','right');
+  txt(priceOf(S.cur).toFixed(2)+'c',W-106,28,13,up?'#6bf28a':'#ff6b6b','right');
+  spark(W-96,9,80,26);
 
   var by=H-BOT;
   X.fillStyle='#1d1b33';X.fillRect(0,by,W,BOT);
@@ -3037,7 +3034,12 @@ function drawHud(){
   txt('arrows',dxp,by+53,7,'#6a6590','center',false);
   txt('mined '+S.mined+'   sold '+S.sold+'   '+S.pts+' pts   '+ISLES.length+' island'+(ISLES.length>1?'s':''),430,by+18,9,'#8d88b5','left',false);
   txt('E stall  I inventory  [ ] switch island  right-click picks up',430,by+34,9,'#6a6590','left',false);
-  txt('right-click an islander to pick them up and move them',430,by+50,9,'#6a6590','left',false);
+  if(S.newsT>0){
+    X.globalAlpha=clamp(S.newsT,0,1);
+    txt(S.news,430,by+50,9,COL.pink,'left',false);X.globalAlpha=1;
+  }
+  else if(S.hintT>0)txt(S.hint.length>44?S.hint.slice(0,44)+'..':S.hint,430,by+50,9,COL.bit2,'left',false);
+  else txt('right-click an islander to move them  -  F retro filter',430,by+50,9,'#6a6590','left',false);
   crtBtn={x:W-92,y:by+13,w:78,h:30};
   rr(crtBtn.x,crtBtn.y,crtBtn.w,crtBtn.h,8);
   fill(S.crt?'#2f3d52':'#262340');line(S.crt?COL.bit:'#3a3663',S.crt?2.5:2);
@@ -3237,7 +3239,7 @@ function drawShop(){
 }
 
 /* ---------- parrot panel ---------- */
-var PRW=420,PRH=578,PRX=(W-PRW)/2,PRY=(H-PRH)/2;
+var PRW=420,PRH=540,PRX=(W-PRW)/2,PRY=(H-PRH)/2;
 var parBtns=[];
 function drawParrotPanel(){
   X.fillStyle='rgba(20,17,40,.62)';X.fillRect(0,0,W,H);
@@ -3250,7 +3252,7 @@ function drawParrotPanel(){
   txt('earn points by mining bit and growing your factory',px+18,py+56,9,'#8d88b5','left',false);
   parBtns=[];
   for(var i=0;i<REW.length;i++){
-    var r=REW[i],ry=py+68+i*43,done=i<S.rew,next=i===S.rew,can=next&&S.pts>=r.p;
+    var r=REW[i],ry=py+68+i*40,done=i<S.rew,next=i===S.rew,can=next&&S.pts>=r.p;
     rr(px+16,ry,PRW-32,38,8);
     fill(done?'#243b28':(next?'#3a3663':'#242140'));
     line(done?'#3d6b45':(can?COL.gold:'#3a3663'),done||can?2.5:2);
@@ -4427,7 +4429,13 @@ function ensureGenerators(){
   }
   A=back;
 }
+var RECLAIM=null;                 /* machines that no longer fit go back in the box */
+function reclaim(t,n){
+  if(!RECLAIM)RECLAIM={};
+  RECLAIM[t]=(RECLAIM[t]||0)+(n||1);
+}
 function load(){
+  RECLAIM=null;
   try{
     var d=JSON.parse(localStorage.getItem('bitminer7'));if(!d)return;
     (d.isles||[]).forEach(function(di,idx){
@@ -4460,13 +4468,18 @@ function load(){
         /* miners that used to have a size switch keep it - as the real large machine */
         if(ex&&ex.big&&(ty==='miner'||ty==='sup'||ty==='ult'))
           ty={miner:'lgminer',sup:'lgsup',ult:'lgult'}[ty];
-        if(!canPlace(ty,a2[1],a2[2]))return;
+        if(!canPlace(ty,a2[1],a2[2])){
+          /* it fell off the edge of a resized island - hand it back rather than bin it */
+          if(PRICES[ty]!==undefined&&ty!=='gen'&&ty!=='lgen')reclaim(ty,1);
+          return;
+        }
         var s=place(ty,a2[1],a2[2],a2[3]||0);
         if(s&&ex){for(var kk in ex)s[kk]=ex[kk];}
         if(s&&!canSwitch(s.t))s.big=false;
       });
       (di.b||[]).forEach(function(a3){
         if(inGrid(a3[0],a3[1])&&!I.cells[a3[1]*GW+a3[0]])I.cells[a3[1]*GW+a3[0]]={t:'belt',dir:a3[2]};
+        else if(!inGrid(a3[0],a3[1]))reclaim('belt',1);
       });
       A=back;
     });
@@ -4483,6 +4496,11 @@ function load(){
     if(!S.unlocked[S.cur])S.cur='bit';
     S.coins=d.coins||0;S.stock=d.stock||S.stock;S.price=clamp(d.price||7.5,5,10);
     fillStock();
+    var reclaimed=0;
+    if(RECLAIM){
+      for(var rk in RECLAIM){S.stock[rk]=(S.stock[rk]||0)+RECLAIM[rk];reclaimed+=RECLAIM[rk];}
+      RECLAIM=null;
+    }
     S.hist=(d.hist&&d.hist.length>2)?d.hist.map(function(v){return clamp(v,5,10);}):S.hist;
     if(d.bank){S.bank.bal=d.bank.bal||0;S.bank.pend=d.bank.pend||0;S.bank.earned=d.bank.earned||0;}
     S.mined=d.mined||0;S.sold=d.sold||0;S.pts=d.pts||0;S.rew=d.rew||0;
@@ -4504,7 +4522,10 @@ function load(){
     }
     ensureGenerators();
     gotoIsle(clamp(d.isle||0,0,ISLES.length-1));
-    S.hint='Welcome back!';S.hintT=2;
+    if(reclaimed>0){
+      S.hint=reclaimed+' machine'+(reclaimed>1?'s':'')+' did not fit the resized island - back in your inventory';
+      S.hintT=10;
+    } else {S.hint='Welcome back!';S.hintT=2;}
   }catch(e){}
 }
 
@@ -4523,7 +4544,7 @@ var IS_WINDOW=(function(){
 })();
 var LAUNCHED=IS_WINDOW,launchState='ready',launchBtn={x:0,y:0,w:0,h:0},playHereBtn={x:0,y:0,w:0,h:0};
 function openGameWindow(){
-  var w=856,h=652;
+  var w=808,h=620;
   var left=Math.max(0,(screen.availWidth||1280)-w-16),top=Math.max(0,(screen.availHeight||800)-h-16);
   var url=location.href.split('#')[0];
   url+=(url.indexOf('?')>=0?'&':'?')+'w=1';
@@ -4591,13 +4612,16 @@ var CRT_FS=[
 '    gl_FragColor=vec4(0.045,0.041,0.086,1.0);return;}',
 '  uv=clamp(uv,0.0,1.0);',
 '  vec2 px=1.0/uRes;',
+/* a faint sideways wobble, per scanline */
+'  uv.x+=sin(uv.y*150.0+uTime*1.7)*0.00030*uAmt;',
 '  vec2 dir=uv-0.5;',
-/* the beams separate more toward the edge of the tube */
-'  float ca=(0.55+dot(dir,dir)*3.2)*uAmt;',
+/* the beams split sideways only - no vertical fringing */
+'  float ca=(0.45+abs(dir.x)*2.6)*uAmt;',
+'  vec2 off=vec2(0.0035*ca*sign(dir.x)+0.0009*ca,0.0);',
 '  vec3 col;',
-'  col.r=texture2D(uTex,uv+dir*0.0030*ca).r;',
+'  col.r=texture2D(uTex,uv+off).r;',
 '  col.g=texture2D(uTex,uv).g;',
-'  col.b=texture2D(uTex,uv-dir*0.0030*ca).b;',
+'  col.b=texture2D(uTex,uv-off).b;',
 /* the soft phosphor glow */
 '  vec3 blur=vec3(0.0);',
 '  blur+=texture2D(uTex,uv+px*vec2( 1.6, 0.0)).rgb;',
@@ -4609,18 +4633,15 @@ var CRT_FS=[
 '  blur+=texture2D(uTex,uv+px*vec2( 3.2,-2.2)).rgb;',
 '  blur+=texture2D(uTex,uv+px*vec2(-3.2,-2.2)).rgb;',
 '  blur*=0.125;',
-'  col=mix(col,blur,0.20*uAmt);',
+'  col=mix(col,blur,0.13*uAmt);',
 '  vec3 bright=max(blur-0.58,0.0);',
-'  col+=bright*0.75*uAmt;',
+'  col+=bright*0.55*uAmt;',
 /* scanlines, fixed count so they never moire with the pixel grid */
 '  float sl=sin(uv.y*248.0*3.14159);',
-'  col*=1.0-0.11*uAmt*sl*sl;',
-/* the aperture grille */
-'  float m=mod(gl_FragCoord.x,3.0);',
-'  vec3 mask=vec3(0.95,0.95,1.07);',
-'  if(m<1.0)mask=vec3(1.07,0.95,0.95);',
-'  else if(m<2.0)mask=vec3(0.95,1.07,0.95);',
-'  col*=mix(vec3(1.0),mask,uAmt);',
+'  col*=1.0-0.085*uAmt*sl*sl;',
+/* a second, wider band of scanline so the horizontal read is stronger */
+'  float sl2=sin(uv.y*82.0*3.14159+uTime*0.6);',
+'  col*=1.0-0.030*uAmt*sl2*sl2;',
 /* vignette and a slow roll down the tube */
 '  col*=1.0-dot(dir,dir)*0.55*uAmt;',
 '  col+=sin((uv.y+uTime*0.05)*6.2831)*0.006*uAmt;',
